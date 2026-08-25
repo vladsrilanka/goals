@@ -213,7 +213,7 @@
   footer{color:var(--ink3); font-size:12.5px; text-align:center; margin-top:30px}
 </style>
 
-<script type="application/json" id="state">{"v":1,"updated":1787634310168,"goal":{"target":30000,"deadline":"2026-12-31","start":"2026-08-25","weeklyMin":700,"monthlyNeed":2500},"income":[],"expenses":[{"id":"e1","title":"Аренда квартиры","amount":700},{"id":"ed8t53n","title":"Прочие траты (еда, одежда, канцелярия, дорога, техника, кафе и так далее","amount":800},{"id":"dmx90di","title":"Медицина ","amount":400},{"id":"wp27ip9","title":"Детский садик","amount":150},{"id":"7ngky7u","title":"Оплата сервисов (Claude, Grok, Gemini и так далее)","amount":200}],"projects":[{"id":"infl","name":"Инфлюенс-маркетинг","prio":3,"status":"active","next":"Закрыть задачи этой недели — покрывает $700"},{"id":"aivid","name":"ИИ-трейлеры и сериалы","prio":3,"status":"active","next":"Сайт + КП, разослать 10 студиям на этой неделе"},{"id":"raul","name":"Доктор Рауль (YouTube)","prio":2,"status":"waiting","next":"Клиент возобновляет — подтвердить бюджет и объём"},{"id":"asmr","name":"АСМР Чееек","prio":2,"status":"active","next":"Заявка на международный конкурс (Тревел)"},{"id":"cursed","name":"Clean the Cursed House","prio":2,"status":"active","next":"Добить 500 игроков, снять рейтинг 16+"},{"id":"solit","name":"Солитёр (HTML/моб)","prio":2,"status":"active","next":"Доделать 30% и отправить издателям"},{"id":"kub","name":"Кубария","prio":1,"status":"waiting","next":"Ждём модерацию Яндекс Игр"},{"id":"albums","name":"Albums.ink","prio":1,"status":"paused","next":"Питч-дек для инвесторов, докрутить SEO"},{"id":"sharky","name":"Sharky Play","prio":1,"status":"paused","next":"Залить Солитёр и Кубарию как первые игры"},{"id":"grad","name":"Град (PC)","prio":1,"status":"paused","next":"Вертикальный срез → рассылка издателям"},{"id":"ikea","name":"Escape Ikea","prio":1,"status":"paused","next":"На паузе до ясности концепта"}]}</script>
+<script type="application/json" id="state">__STATE__</script>
 
 <div class="wrap">
   <header class="top">
@@ -346,7 +346,7 @@ async function loadState(){
   try{ const r=await fetch("data/state.json",{cache:"no-store"}); if(r.ok) fileSt=await r.json(); }catch(e){}
   let localSt=null;
   try{ localSt=JSON.parse(localStorage.getItem(LS_KEY)); }catch(e){}
-  state = migrate(newest(newest(parseInline(),fileSt),localSt)) || clone(DEFAULT_STATE);
+  state = migrate(newest(newest(parseInline(),fileSt),localSt)) || blankState();
 }
 
 /* ---------- lookups & math ---------- */
@@ -1090,7 +1090,7 @@ document.addEventListener("drop", e=>{
 function chip(cls,text){ const c=document.getElementById("savechip"); c.className="savechip "+cls; c.textContent=text; }
 function touch(rerender){
   state.updated=Date.now(); dirty=true;
-  try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(e){}
+  try{ localStorage.setItem(lsKey(), JSON.stringify(state)); }catch(e){}
   chip("dirty","Есть изменения…");
   if(rerender) render();
   clearTimeout(saveTimer); saveTimer=setTimeout(cloudSave, 2500);
@@ -1130,7 +1130,7 @@ async function cloudSave(){
     chip("local","Сохранено локально"); dirty=false;
   }
 }
-window.addEventListener("beforeunload",()=>{ try{ localStorage.setItem(LS_KEY, JSON.stringify(state)); }catch(e){} });
+window.addEventListener("beforeunload",()=>{ try{ localStorage.setItem(lsKey(), JSON.stringify(state)); }catch(e){} });
 
 /* ---------- Supabase sync (версия-сайт) ---------- */
 function getSyncKey(){
@@ -1175,6 +1175,13 @@ function loadSbLib(){
     document.head.appendChild(s);
   });
 }
+function blankState(){
+  const s=clone(DEFAULT_STATE);
+  ["directions","projects","tasks","income","goals","expensesFixed","expensesAdhoc","debts","adjustments"].forEach(k=>s[k]=[]);
+  s.updated=Date.now();
+  return s;
+}
+function lsKey(){ return (authMode&&session)?LS_KEY+"_"+session.user.id:LS_KEY; }
 async function accountFetch(){
   const {data,error}=await sb.from("user_dashboards").select("data").eq("user_id",session.user.id).maybeSingle();
   if(error) throw error;
@@ -1184,12 +1191,13 @@ async function accountPush(){
   const {error}=await sb.from("user_dashboards").upsert({ user_id:session.user.id, data:state, updated:state.updated||0, updated_at:new Date().toISOString() });
   if(error) throw error;
 }
-async function accountLoadMerge(){
-  let remote=null; try{ remote=await accountFetch(); }catch(e){}
-  let legacy=null;
-  try{ supaKey=getSyncKey(); legacy=migrate(await supaRpc("goals_get",{p_k:supaKey})); }catch(e){}
-  const best=[remote,legacy,state].filter(Boolean).sort((a,b)=>(b.updated||0)-(a.updated||0))[0];
-  if(best&&best!==state){ state=best; render(); }
+async function accountLoad(){
+  /* данные аккаунта — только из строки аккаунта (+ его личный офлайн-кэш). Никаких переносов чужого. */
+  const remote=await accountFetch();
+  let cache=null;
+  try{ cache=migrate(JSON.parse(localStorage.getItem(LS_KEY+"_"+session.user.id))); }catch(e){}
+  state = newest(remote, cache) || blankState();
+  render();
   await accountPush();
 }
 function renderAuth(){
@@ -1203,12 +1211,13 @@ async function onAuthChanged(){
   renderAuth();
   if(session){
     chip("saving","Подключаю аккаунт…");
-    try{ await accountLoadMerge(); authMode=true; supaMode=false; chip("","✓ "+(session.user.email||"аккаунт")); }
-    catch(e){ chip("local","Аккаунт: ошибка, работаю по ключу"); authMode=false; }
+    try{ authMode=true; supaMode=false; await accountLoad(); chip("","✓ "+(session.user.email||"аккаунт")); }
+    catch(e){ authMode=false; chip("local","Аккаунт: ошибка сети — обнови страницу"); }
   } else {
+    /* вышел из аккаунта: чистим общий кэш и стартуем заново, чтобы данные аккаунта не остались на странице */
     authMode=false;
-    try{ supaKey=getSyncKey(); await supaLoadMerge(); supaMode=true; chip("","В облаке ✓ · клик = ссылка"); }
-    catch(e){ chip("local","Только локально"); }
+    try{ localStorage.removeItem(LS_KEY); }catch(e){}
+    location.reload();
   }
 }
 document.addEventListener("click", async e=>{
