@@ -211,6 +211,22 @@
   .mcell .lbl{font-size:11px; color:var(--ink3); text-transform:uppercase; letter-spacing:.06em}
   .mcell .v2{font-weight:600; margin-top:2px}
   footer{color:var(--ink3); font-size:12.5px; text-align:center; margin-top:30px}
+  /* goal combo bar */
+  .gbar-click{cursor:pointer}
+  .gbar-click:hover{outline:2px solid var(--accent); outline-offset:1px}
+  .gtick{position:absolute; top:-4px; bottom:-4px; width:2px; background:var(--ink2); z-index:3; border-radius:2px}
+  .expandhint{font-size:12px; color:var(--ink3); white-space:nowrap; user-select:none}
+  .expandhint .chev{display:inline-block; transition:transform .2s}
+  .expandhint.open .chev{transform:rotate(180deg)}
+  .tt{position:relative; cursor:help; border-bottom:1px dotted var(--ink3)}
+  .tt:hover::after{content:attr(data-tip); position:absolute; bottom:calc(100% + 7px); left:0; background:var(--ink); color:var(--bg); padding:7px 11px; border-radius:8px; font-size:12px; line-height:1.4; width:230px; z-index:20; box-shadow:var(--shadow); font-weight:400; white-space:normal}
+  .explore{margin-top:12px; padding-top:12px; border-top:1px dashed var(--line)}
+  .explore .deals{display:flex; gap:14px; flex-wrap:wrap; font-size:13px; margin-top:6px; color:var(--ink2)}
+  .goalx2{border-top:1px solid var(--line); margin-top:16px; padding-top:14px}
+  .bigadd{display:flex; flex-direction:column; align-items:center; justify-content:center; padding:46px 20px; cursor:pointer; border:2px dashed var(--line); background:transparent}
+  .bigadd:hover{border-color:var(--accent)}
+  .bigadd .plus{font-size:58px; line-height:1; color:var(--accent); font-weight:300}
+  .bigadd .t{font-size:17px; color:var(--ink2); margin-top:8px}
   /* landing */
   .hero{text-align:center; padding:64px 16px 40px}
   .hero h1{font-size:clamp(34px,6vw,58px); letter-spacing:.03em}
@@ -250,8 +266,8 @@ const FIXED_DEFAULT = [
 ];
 const DEFAULT_STATE = {
   v:2, updated:0,
-  goal:{ target:30000, moveNeed:20000, lifeNeed:10000, deadline:"2026-12-31", start:"2026-08-25", weeklyMin:700,
-    title:"Курс на Уругвай", sub1Label:"Жизнь до отъезда", sub2Label:"Переезд" },
+  goal:{ target:30000, deadline:"2026-12-31", start:"2026-08-25", weeklyMin:700, title:"Курс на Уругвай",
+    subs:[ {id:"s1",label:"Жизнь до отъезда",amount:10000}, {id:"s2",label:"Переезд",amount:20000} ] },
   directions:[
     { id:"infl",   name:"Инфлюенс-маркетинг",          prio:3, status:"active" },
     { id:"aivid",  name:"ИИ-трейлеры и сериалы",        prio:3, status:"active" },
@@ -312,8 +328,13 @@ function migrate(s){
   if (s.v>=2){
     for (const k of ["directions","projects","tasks","income","goals","expensesFixed","expensesAdhoc","debts","adjustments"])
       if (!Array.isArray(s[k])) s[k]=[];
-    if (!s.goal.moveNeed){ s.goal.moveNeed=20000; s.goal.lifeNeed=(s.goal.target||30000)-20000; }
-    if (!s.goal.title){ s.goal.title="Курс на Уругвай"; s.goal.sub1Label="Жизнь до отъезда"; s.goal.sub2Label="Переезд"; }
+    if (s.goal && !Array.isArray(s.goal.subs)){
+      if (!s.goal.title) s.goal.title="Курс на Уругвай";
+      s.goal.subs=[
+        { id:"s1", label:s.goal.sub1Label||"Жизнь до отъезда", amount:+s.goal.lifeNeed||10000 },
+        { id:"s2", label:s.goal.sub2Label||"Переезд", amount:+s.goal.moveNeed||20000 }
+      ];
+    }
     s.projects.forEach(p=>{ if(!p.prio) p.prio=2; });
     return s;
   }
@@ -383,7 +404,10 @@ function weighted(dirId){
   return state.income.filter(i=>["idea","talks","invoiced"].includes(i.status) && (!dirId||i.dirId===dirId))
     .reduce((s,i)=>s+i.amount*(i.prob||0)/100,0);
 }
-function daysLeft(){ return Math.max(0,Math.ceil((new Date(state.goal.deadline+"T23:59:59")-new Date())/864e5)); }
+function daysLeft(){ if(!state.goal||!state.goal.deadline) return 0; return Math.max(0,Math.ceil((new Date(state.goal.deadline+"T23:59:59")-new Date())/864e5)); }
+function goalTargetMain(){ const g=state.goal; if(!g) return 0; const s=(g.subs||[]).reduce((a,x)=>a+ +x.amount,0); return s||+g.target||0; }
+function openDeals(gid){ return state.income.filter(i=>["idea","talks","invoiced"].includes(i.status)&&goalIdOf(i)===gid); }
+function maxPotential(gid){ return openDeals(gid).reduce((s,i)=>s+ +i.amount,0); }
 /* денежные цели: main = Уругвай, остальные в state.goals */
 function goalIdOf(i){ return i.goalId||"main"; }
 function paidTotalGoal(gid){ return state.income.filter(i=>i.status==="paid"&&goalIdOf(i)===gid).reduce((s,i)=>s+ +i.amount,0); }
@@ -423,6 +447,7 @@ function fixedMonthly(){
 function curWeek(){ const m=mondayOf(new Date()); return [m,addD(m,7)]; }
 function curMonth(){ const a=new Date(); a.setDate(1); a.setHours(0,0,0,0); const b=new Date(a); b.setMonth(b.getMonth()+1); return [a,b]; }
 function allWeeks(){
+  if(!state.goal||!state.goal.start||!state.goal.deadline) return [];
   const out=[]; let m=mondayOf(new Date(state.goal.start+"T12:00"));
   const end=new Date(state.goal.deadline+"T23:59:59");
   while(m<=end){ out.push(new Date(m)); m=addD(m,7); }
@@ -454,6 +479,7 @@ function route(){
   const h=location.hash;
   if (h.startsWith("#/dir/")) return {p:"dir", id:h.slice(6)};
   if (h.startsWith("#/weeks")) return {p:"weeks"};
+  if (h.startsWith("#/goal")) return {p:"goaledit"};
   return {p:"main"};
 }
 function renderHeader(){
@@ -461,11 +487,13 @@ function renderHeader(){
   const sc=document.getElementById("savechip");
   if(IS_SITE && !session){ el.innerHTML=""; if(sc) sc.style.display="none"; return; }
   if(sc) sc.style.display="";
-  const g=state.goal, tgt=(g.lifeNeed||0)+(g.moveNeed||0);
-  el.innerHTML='<input class="inline dname goal-f" data-g="title" value="'+esc(g.title||"Моя цель")+'" style="width:100%;font-size:26px" title="Название цели — нажми и переименуй">'+
-    '<p class="sub" style="margin:2px 0 0"><span class="num">'+fmt(tgt)+'</span> до '+
-    '<input class="inline num goal-f" data-g="deadline" type="date" value="'+(g.deadline||"")+'" style="width:135px"> · минимум '+
-    '<input class="amt num goal-f" data-g="weeklyMin" type="number" value="'+(g.weeklyMin||0)+'" style="width:74px;padding:2px 6px">/нед</p>';
+  const g=state.goal;
+  if(!g){ el.innerHTML='<h1 style="font-size:26px">Мои цели</h1><p class="sub" style="margin:2px 0 0">Создай главную цель — и всё закрутится.</p>'; return; }
+  el.innerHTML='<h1 style="font-size:26px">'+esc(g.title||"Моя цель")+'</h1>'+
+    '<p class="sub" style="margin:2px 0 0"><span class="num">'+fmt(goalTargetMain())+'</span>'+
+    (g.deadline?' до <span class="num">'+g.deadline+'</span>':'')+
+    (g.weeklyMin?' · минимум <span class="num">'+fmt(g.weeklyMin)+'</span>/нед':'')+
+    ' · <a href="#/goal">настроить</a></p>';
 }
 function renderLanding(){
   document.getElementById("nav").innerHTML="";
@@ -500,69 +528,166 @@ function render(){
     '<a href="#/weeks" class="'+(r.p==="weeks"?"on":"")+'">Недели</a>'+
     (r.p==="dir"?'<a href="#/dir/'+r.id+'" class="on">'+esc((dir(r.id)||{}).name||"—")+'</a>':'');
   const app=document.getElementById("app");
-  if (r.p==="weeks") app.innerHTML=vWeeks();
+  if (r.p==="goaledit") app.innerHTML=vGoalEdit();
+  else if (r.p==="weeks") app.innerHTML = state.goal?vWeeks():'<section class="panel"><p class="muted">Сначала <a href="#/goal">создай главную цель</a> — недели считаются от её старта до дедлайна.</p></section>';
   else if (r.p==="dir"){ const d=dir(r.id); app.innerHTML = d?vDir(d):'<p class="muted">Направление не найдено. <a href="#/">На главную</a></p>'; }
   else app.innerHTML=vMain();
+  const eb=document.querySelector("[data-exp-box]"); if(eb) updExplore(eb);
+}
+
+/* ---------- goal panels ---------- */
+let expandedGoal=null;
+const TIP_FACT="Деньги со статусом «получено» — они уже у тебя.";
+const TIP_EXP="Факт + открытые сделки, умноженные на их вероятность. Реалистичная оценка того, к чему идёшь.";
+const TIP_MAX="Если закроются все открытые сделки до единой. Оптимистичный потолок.";
+function barCombo(gid, fact, target){
+  const exp=fact+weightedGoal(gid), mx=fact+maxPotential(gid);
+  const t=Math.max(1,target);
+  const open=expandedGoal===gid;
+  return `
+  <div class="bar gbar-click" data-expand="${gid}" title="Нажми, чтобы исследовать вероятности" style="overflow:visible">
+    <span style="position:absolute;inset:0;border-radius:99px;overflow:hidden"><i class="fc" style="position:absolute;inset:0 auto 0 0;display:block;background:var(--accent);opacity:.22;border-radius:99px;width:${Math.min(100,exp/t*100)}%"></i><i style="position:absolute;inset:0 auto 0 0;display:block;background:linear-gradient(90deg,var(--accent),var(--gold));border-radius:99px;min-width:6px;width:${Math.min(100,fact/t*100)}%"></i></span>
+    ${mx>fact?'<div class="gtick" style="left:'+Math.min(99.5,mx/t*100)+'%"></div>':''}
+  </div>
+  <div class="lbl-row" style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:13px;color:var(--ink2)">
+    <span class="tt" data-tip="${TIP_FACT}">Факт <b class="num" style="color:var(--ink)">${fmt(fact)}</b></span>
+    <span class="tt" data-tip="${TIP_EXP}">Ожидаемо <b class="num" style="color:var(--ink)">${fmt(exp)}</b></span>
+    <span class="tt" data-tip="${TIP_MAX}">Максимум <b class="num" style="color:var(--ink)">${fmt(mx)}</b></span>
+    <span class="expandhint ${open?"open":""}" data-expand="${gid}" style="cursor:pointer"><span class="chev">▾</span> ${open?"свернуть":"подробнее"}</span>
+  </div>
+  ${open?vExplore(gid,fact,t):""}`;
+}
+function vExplore(gid, fact, target){
+  const deals=openDeals(gid);
+  if(!deals.length) return '<div class="explore muted" style="font-size:13px">Открытых сделок по этой цели нет — добавь их в пайплайн с вероятностью.</div>';
+  return `<div class="explore" data-exp-box="${gid}" data-fact="${fact}" data-target="${target}">
+    <div class="bar" style="height:12px"><i class="fc" style="opacity:.5" data-exp-pot></i><i style="width:${Math.min(100,fact/target*100)}%;opacity:.6" data-exp-fact></i></div>
+    <input type="range" min="1" max="100" value="50" class="exp-sl" style="width:100%;accent-color:var(--accent)">
+    <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--ink2);flex-wrap:wrap;gap:8px">
+      <span>Считать сделки с вероятностью: <b class="num" data-exp-thr style="color:var(--ink)"></b></span>
+      <span>Итог при пороге: <b class="num" data-exp-amt style="color:var(--ink)"></b></span>
+    </div>
+    <div class="deals" data-exp-deals></div>
+  </div>`;
+}
+function updExplore(box){
+  const gid=box.dataset.expBox, fact=+box.dataset.fact, target=+box.dataset.target;
+  const thr=+box.querySelector(".exp-sl").value;
+  const deals=openDeals(gid);
+  const pot=fact+deals.filter(d=>(d.prob||0)>=thr).reduce((s,d)=>s+ +d.amount,0);
+  box.querySelector("[data-exp-pot]").style.width=Math.min(100,pot/target*100)+"%";
+  box.querySelector("[data-exp-thr]").textContent="≥ "+thr+"%";
+  box.querySelector("[data-exp-amt]").textContent=fmt(pot);
+  box.querySelector("[data-exp-deals]").innerHTML=deals.slice().sort((a,b)=>(b.prob||0)-(a.prob||0)).map(d=>
+    '<span style="'+((d.prob||0)>=thr?'':'opacity:.35;text-decoration:line-through')+'">'+esc(d.title)+' <b class="num">'+fmt(d.amount)+'</b> · '+(d.prob||0)+'%</span>').join("");
+}
+function vGoalArea(){
+  const g=state.goal;
+  let out="";
+  if(!g){
+    out+='<section class="panel bigadd" id="addMainGoal"><div class="plus">+</div><div class="t">Добавить цель</div></section>';
+  } else {
+    const paid=paidTotalGoal("main"), tgt=goalTargetMain();
+    const pct=Math.min(100,tgt?paid/tgt*100:0);
+    const dl=daysLeft(), pace=dl?Math.max(0,tgt-paid)/Math.max(1,dl/7):0;
+    let rem=paid;
+    const subs=(g.subs||[]).map(s=>{
+      const done=Math.max(0,Math.min(rem,+s.amount)); rem-=done;
+      return `<div class="subgoal"><span>${esc(s.label)} <b class="num">${fmt(s.amount)}</b></span>
+        <div class="bar" style="height:10px;margin:0"><i style="display:block;height:100%;border-radius:99px;background:var(--ok);width:${Math.min(100,s.amount?done/s.amount*100:0)}%"></i></div>
+        <span class="num muted">${fmt(done)} / ${fmt(s.amount)}</span></div>`;
+    }).join("");
+    out+=`<section class="panel">
+      <div class="goalrow"><div class="goal-big num">${fmt(paid)} <small>из ${fmt(tgt)}</small></div>
+        <span style="display:flex;gap:10px;align-items:center"><span class="muted num">${pct.toFixed(1)}%</span>
+          <a class="ghost" href="#/goal" style="padding:4px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px">⚙ настроить</a></span></div>
+      ${barCombo("main", paid, tgt)}
+      <div class="goalmeta" style="margin-top:8px">
+        <span>Осталось: <b class="num">${fmt(Math.max(0,tgt-paid))}</b></span>
+        ${dl?'<span>Дней до дедлайна: <b class="num">'+dl+'</b></span><span>Нужный темп: <b class="num">'+fmt(pace)+'/нед</b></span>':''}
+      </div>
+      ${subs?'<div class="subgoals">'+subs+'</div>':''}
+    </section>`;
+  }
+  const extras=state.goals;
+  if(extras.length){
+    const g2=extras[0], p2=paidTotalGoal(g2.id), t2=+g2.target||1;
+    out+=`<section class="panel">
+      <div class="goalrow"><div style="font-weight:600;font-size:18px">${esc(g2.name)} <small class="muted num" style="font-weight:400">${g2.deadline?"до "+g2.deadline:""}</small></div>
+        <span class="muted num">${Math.min(100,p2/t2*100).toFixed(1)}%</span></div>
+      <div class="goal-big num" style="font-size:24px">${fmt(p2)} <small>из ${fmt(g2.target)}</small></div>
+      ${barCombo(g2.id, p2, t2)}
+    </section>`;
+    if(extras.length>1)
+      out+='<p class="muted" style="font-size:13px;margin:-8px 0 16px">Ещё целей: '+(extras.length-1)+' — на главной показываются две (главная и одна дополнительная). <a href="#/goal">Управлять целями</a></p>';
+  }
+  return out;
+}
+/* ---------- goal edit screen ---------- */
+function vGoalEdit(){
+  const g=state.goal;
+  let main;
+  if(!g){
+    main='<p class="muted">Главной цели пока нет.</p><button class="primary" id="createMainGoal">Создать главную цель</button>';
+  } else {
+    main=`
+    <div class="mrow" style="margin-bottom:12px; align-items:end; gap:12px">
+      <span style="flex:1;min-width:220px"><label class="mini">Название</label><input class="goal-f" data-g="title" value="${esc(g.title||"")}" style="width:100%"></span>
+      <span><label class="mini">Дедлайн</label><input class="goal-f num" data-g="deadline" type="date" value="${g.deadline||""}"></span>
+      <span><label class="mini">Минимум в неделю, $</label><input class="goal-f amt num" data-g="weeklyMin" type="number" value="${g.weeklyMin||0}"></span>
+    </div>
+    <h3 style="margin:14px 0 8px">Подцели</h3>
+    <div class="tscroll"><table><tbody>
+      ${(g.subs||[]).map(s=>`<tr data-id="${s.id}">
+        <td><input class="inline" data-f="label" value="${esc(s.label)}"></td>
+        <td class="r"><input class="amt num" data-f="amount" type="number" value="${+s.amount}"></td>
+        <td><button class="x" data-delsub title="Удалить">×</button></td></tr>`).join("")||'<tr><td class="muted">Подцелей нет — цель будет одной суммой.</td></tr>'}
+    </tbody></table></div>
+    <form class="addrow" id="subForm">
+      <input name="title" placeholder="Название подцели" required>
+      <input name="amount" class="amt" type="number" min="1" placeholder="$" required>
+      <button class="primary" type="submit">Добавить подцель</button>
+    </form>
+    <p class="muted" style="font-size:12.5px">Сумма цели = сумма подцелей: <b class="num">${fmt(goalTargetMain())}</b>. Подцели заполняются доходом по порядку сверху вниз.</p>
+    <button class="ghost" id="delMainGoal" style="margin-top:8px;color:var(--bad)">Удалить главную цель</button>`;
+  }
+  return `
+  <a class="backlink" href="#/">← На главную</a>
+  <section class="panel"><h2>Главная цель</h2>${main}</section>
+  <section class="panel"><h2>Дополнительные цели</h2>
+    <p class="muted" style="margin-top:0;font-size:13px">На главной целиком показывается одна дополнительная цель (первая в списке); у неё тот же функционал, что у главной. Доходы привязываются к целям в пайплайне.</p>
+    <div class="tscroll"><table><tbody>
+      ${state.goals.map(gg=>`<tr data-id="${gg.id}">
+        <td><input class="inline" data-f="name" value="${esc(gg.name)}"></td>
+        <td class="r"><input class="amt num" data-f="target" type="number" value="${+gg.target}"></td>
+        <td><input class="num" data-f="deadline" type="date" value="${gg.deadline||""}" style="width:135px"></td>
+        <td class="r num muted">получено ${fmt(paidTotalGoal(gg.id))}</td>
+        <td><button class="x" data-del="goals">×</button></td></tr>`).join("")||'<tr><td class="muted">Дополнительных целей нет.</td></tr>'}
+    </tbody></table></div>
+    <form class="addrow" id="goalForm">
+      <input name="title" placeholder="Название цели" required>
+      <input name="amount" class="amt" type="number" min="1" placeholder="$" required>
+      <input name="due" type="date" title="Дедлайн (необязательно)">
+      <button class="primary" type="submit">Добавить цель</button>
+    </form>
+  </section>`;
 }
 
 /* ---------- main page ---------- */
 function vMain(){
-  const paid=paidTotalGoal("main");
-  const life=state.goal.lifeNeed||10000, move=state.goal.moveNeed||20000, tgt=life+move;
-  const lifeDone=Math.min(paid,life), moveDone=Math.max(0,Math.min(paid-life,move));
-  const pct=Math.min(100,paid/tgt*100);
-  const dl=daysLeft(), pace=Math.max(0,tgt-paid)/Math.max(1,dl/7);
+  const paid=paidTotalGoal("main"), tgt=goalTargetMain();
+  const wmin=state.goal?(+state.goal.weeklyMin||0):0;
   const [wa,wb]=curWeek(), [ma,mb]=curMonth();
-  const wk=paidIn(wa,wb), mo=paidIn(ma,mb), wgt=weightedGoal("main"), wgtAll=weighted();
+  const wk=paidIn(wa,wb), mo=paidIn(ma,mb), wgtAll=weighted();
   const fx=fixedMonthly(), adhocMo=adhocIn(ma,mb);
   const mName=MONTHS_R[new Date().getMonth()];
 
   const tile=(lbl,val,hint,frac,cls)=>'<div class="tile '+cls+'"><div class="lbl">'+lbl+'</div><div class="val num">'+val+'</div><div class="hint">'+hint+'</div><div class="minibar"><i style="width:'+Math.min(100,frac*100)+'%"></i></div></div>';
 
   return `
-  <section class="panel">
-    <div class="goalrow"><div class="goal-big num">${fmt(paid)} <small>из ${fmt(tgt)}</small></div>
-    <span style="display:flex;gap:10px;align-items:center"><span class="muted num">${pct.toFixed(1)}%</span>
-      <button class="ghost" id="addGoalBtn" title="Добавить денежную цель" style="padding:4px 12px">+ цель</button></span></div>
-    <div class="bar"><i class="fc" style="width:${Math.min(100,(paid+wgt)/tgt*100)}%"></i><i style="width:${pct}%"></i></div>
-    <div class="goalmeta">
-      <span>Осталось: <b class="num">${fmt(tgt-paid)}</b></span>
-      <span>Дней до дедлайна: <b class="num">${dl}</b></span>
-      <span>Нужный темп: <b class="num">${fmt(pace)}/нед</b></span>
-      ${wgt?'<span>В пайплайне ждёт: <b class="num">'+fmt(wgt)+'</b> <span class="muted">(бледная зона)</span></span>':''}
-    </div>
-    <div class="subgoals">
-      <div class="subgoal life">
-        <span style="display:flex;gap:4px;align-items:center"><input class="inline goal-f" data-g="sub1Label" value="${esc(state.goal.sub1Label||"Резерв на жизнь")}" style="padding:2px 4px">
-          <input class="amt num goal-f" data-g="lifeNeed" type="number" value="${life}" style="width:84px;padding:2px 6px"></span>
-        <div class="bar"><i style="width:${Math.min(100,lifeDone/life*100)}%"></i></div>
-        <span class="num muted">${fmt(lifeDone)} / ${fmt(life)}</span>
-      </div>
-      <div class="subgoal move">
-        <span style="display:flex;gap:4px;align-items:center"><input class="inline goal-f" data-g="sub2Label" value="${esc(state.goal.sub2Label||"Главная цель")}" style="padding:2px 4px">
-          <input class="amt num goal-f" data-g="moveNeed" type="number" value="${move}" style="width:84px;padding:2px 6px"></span>
-        <div class="bar"><i style="width:${Math.min(100,moveDone/move*100)}%"></i></div>
-        <span class="num muted">${fmt(moveDone)} / ${fmt(move)}</span>
-      </div>
-      ${state.goals.map(g=>{
-        const p=paidTotalGoal(g.id), w=weightedGoal(g.id), gpct=Math.min(100,g.target?p/g.target*100:0);
-        return `<div class="subgoal goalx" data-id="${g.id}" style="border-top:1px dashed var(--line);padding-top:8px">
-          <span style="display:flex;gap:4px;align-items:center"><input class="inline" data-f="name" value="${esc(g.name)}" style="font-weight:500;padding:2px 4px">
-            <input class="amt num" data-f="target" type="number" value="${+g.target}" title="Сумма цели" style="width:80px"></span>
-          <div class="bar"><i class="fc" style="width:${Math.min(100,g.target?(p+w)/g.target*100:0)}%"></i><i style="width:${gpct}%;background:var(--accent)"></i></div>
-          <span class="num muted" style="display:flex;gap:6px;align-items:center">${fmt(p)} / ${fmt(g.target)}${w?' <span title="в пайплайне">(+'+fmt(w)+')</span>':''}
-            <button class="x" data-del="goals" title="Удалить цель">×</button></span>
-        </div>`;}).join("")}
-    </div>
-    <form class="addrow" id="goalForm" style="display:none">
-      <input name="title" placeholder="Название цели" required>
-      <input name="amount" class="amt" type="number" min="1" step="1" placeholder="$" required>
-      <input name="due" type="date" title="Дедлайн (необязательно)">
-      <button class="primary" type="submit">Добавить цель</button>
-    </form>
-  </section>
+  ${vGoalArea()}
   <section class="tiles">
-    ${tile("Эта неделя · "+fmtD(wa)+"–"+fmtD(addD(wb,-1)), fmt(wk), "минимум "+fmt(state.goal.weeklyMin), wk/state.goal.weeklyMin, wk>=state.goal.weeklyMin?"good":"bad")}
+    ${tile("Эта неделя · "+fmtD(wa)+"–"+fmtD(addD(wb,-1)), fmt(wk), wmin?"минимум "+fmt(wmin):"доход за неделю", wmin?wk/wmin:(wk?1:0), wmin?(wk>=wmin?"good":"bad"):"")}
     ${tile("Этот месяц · "+mName, fmt(mo), "минимум "+fmt(fx)+" (обяз. расходы)", mo/Math.max(1,fx), mo>=fx?"good":"")}
     ${tile("Прогноз из пайплайна", fmt(wgtAll), "открытые сделки × их вероятность (все цели)", Math.min(1,wgtAll/Math.max(1,tgt-paid)), "")}
     ${tile("Расходы · "+mName, fmt(fx+adhocMo), "обязательные "+fmt(fx)+" + разовые "+fmt(adhocMo), 1, "")}
@@ -800,7 +925,8 @@ function vWeeks(){
 function vDir(d){
   const [wa,wb]=curWeek(), [ma,mb]=curMonth();
   const months=[];
-  { let m=new Date(state.goal.start+"T12:00"); m.setDate(1);
+  if(state.goal&&state.goal.start&&state.goal.deadline){
+    let m=new Date(state.goal.start+"T12:00"); m.setDate(1);
     const end=new Date(state.goal.deadline+"T12:00");
     while(m<=end){ const a=new Date(m), b=new Date(m); b.setMonth(b.getMonth()+1);
       months.push({name:MONTHS_R[a.getMonth()], v:paidIn(a,b,d.id)}); m=b; } }
@@ -971,10 +1097,14 @@ function findItem(id){
   for (const k of ["income","goals","expensesFixed","expensesAdhoc","directions","projects","tasks","debts","adjustments"]){
     const it=state[k].find(x=>x.id===id); if(it) return it;
   }
+  if (state.goal && Array.isArray(state.goal.subs)){
+    const it=state.goal.subs.find(x=>x.id===id); if(it) return it;
+  }
   return null;
 }
 document.addEventListener("input", e=>{
   const t=e.target;
+  if(t.classList.contains("exp-sl")){ const box=t.closest("[data-exp-box]"); if(box) updExplore(box); return; }
   if(t.classList.contains("goal-f")){
     state.goal[t.dataset.g] = t.type==="number" ? +t.value : t.value;
     touch(false); return;
@@ -1018,13 +1148,22 @@ document.addEventListener("click", e=>{
   const vb=e.target.closest("[data-view]");
   if(vb){ dirView[vb.dataset.scope]=vb.dataset.view; localStorage.setItem("u30_view_"+vb.dataset.scope, vb.dataset.view); render(); return; }
 
-  if(e.target.id==="addGoalBtn"){
-    const gform=document.getElementById("goalForm");
-    const show=gform.style.display==="none";
-    gform.style.display=show?"flex":"none";
-    if(show) gform.title.focus();
+  const ex=e.target.closest("[data-expand]");
+  if(ex){ const gid=ex.dataset.expand; expandedGoal = expandedGoal===gid?null:gid; render();
+    const box=document.querySelector('[data-exp-box="'+expandedGoal+'"]'); if(box) updExplore(box); return; }
+  if(e.target.id==="addMainGoal"||e.target.closest&&e.target.closest("#addMainGoal")){ location.hash="#/goal"; return; }
+  if(e.target.id==="createMainGoal"){
+    const d=new Date(); d.setMonth(d.getMonth()+6);
+    state.goal={ title:"Моя цель", target:0, deadline:d.toISOString().slice(0,10), start:today(), weeklyMin:0, subs:[] };
+    touch(true); return;
+  }
+  if(e.target.id==="delMainGoal"){
+    if(confirm("Удалить главную цель? Доходы и записи останутся.")){ state.goal=null; location.hash="#/"; touch(true); }
     return;
   }
+  const ds=e.target.closest("[data-delsub]");
+  if(ds){ const id=ds.closest("[data-id]").dataset.id;
+    state.goal.subs=state.goal.subs.filter(x=>x.id!==id); touch(true); return; }
   const pf=e.target.closest(".pf");
   if(pf){ pipeFilter=pf.dataset.pf; localStorage.setItem("u30_pipe", pipeFilter); render(); return; }
 
@@ -1099,6 +1238,7 @@ document.addEventListener("submit", e=>{
   }
   else if(f.id==="adjForm") state.adjustments.push({ id:uid(), date:fd.get("date")||today(), balance:+fd.get("balance"), comment:fd.get("comment")||"" });
   else if(f.id==="goalForm") state.goals.push({ id:uid(), name:fd.get("title"), target:+fd.get("amount"), deadline:fd.get("due")||"" });
+  else if(f.id==="subForm"){ if(!state.goal.subs) state.goal.subs=[]; state.goal.subs.push({ id:uid(), label:fd.get("title"), amount:+fd.get("amount") }); }
   else if(f.classList.contains("payForm")){
     const debt=state.debts.find(x=>x.id===f.dataset.debt);
     debt.payments.push({ id:uid(), date:fd.get("date")||today(), amount:+fd.get("amount"), comment:fd.get("comment")||"" });
@@ -1231,8 +1371,7 @@ function loadSbLib(){
 function blankState(){
   const s=clone(DEFAULT_STATE);
   ["directions","projects","tasks","income","goals","expensesFixed","expensesAdhoc","debts","adjustments"].forEach(k=>s[k]=[]);
-  s.goal={ target:30000, moveNeed:20000, lifeNeed:10000, deadline:"2026-12-31", start:today(), weeklyMin:700,
-    title:"Моя цель", sub1Label:"Резерв на жизнь", sub2Label:"Главная цель" };
+  s.goal=null; /* у нового аккаунта цели нет — большой «+ Добавить цель» */
   s.updated=Date.now();
   return s;
 }
