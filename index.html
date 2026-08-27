@@ -417,7 +417,7 @@ const SUPA = { url:"https://xhyoltlrpfsneerivmab.supabase.co", key:"sb_publishab
 let state=null, artifactNS=null, dirty=false, saveTimer=null, supaMode=false, supaKey=null;
 let sb=null, session=null, authMode=false;
 let selWeek=null, dirView={}, debtsHidden = localStorage.getItem("u30_eye")!=="show";
-const BUILD="2026.08.27-15";
+const BUILD="2026.08.27-16";
 try{
   if(localStorage.getItem("u30_build")!==BUILD){
     for(let i=localStorage.length-1;i>=0;i--){
@@ -794,32 +794,12 @@ function renderLanding(){
       </div>
     </div>
 
-    <div class="lsec">
-      <h2>Тарифы</h2>
-      <p class="lsub">Начните бесплатно. Платите, когда почувствуете пользу.</p>
-      <div class="plans">
-        <div class="plan">
-          <div class="cap">Старт</div><div class="price">$0</div>
-          <div class="muted" style="font-size:13px">навсегда</div>
-          <ul><li>Одна цель с этапами</li><li>Направления и проекты</li><li>Задачи: список, канбан, Гант</li></ul>
-          <button class="ghost" id="emailBtn2" style="width:100%">Создать цель</button>
-        </div>
-        <div class="plan pro">
-          <span class="badge">ПОПУЛЯРНЫЙ</span>
-          <div class="cap">PRO</div><div class="price">$5</div>
-          <div class="muted" style="font-size:13px">в месяц · $49 в год</div>
-          <ul><li>Вероятности и прогноз дохода</li><li>Несколько целей и долги</li><li>Светофор темпа и недели</li><li>Экспорт и доступ в сообщество</li></ul>
-          <button class="primary" id="googleBtn3" style="width:100%">Начать бесплатно</button>
-        </div>
-      </div>
-      <p class="muted" style="font-size:13px;margin-top:14px">Lifetime $79 — первым 200 пользователям.</p>
-    </div>
-
     <div class="lsec" style="padding-bottom:60px">
       <h2 style="font-size:34px">Поставьте дату. Остальное посчитаем.</h2>
       <div class="herobtns" style="justify-content:center">
         <button class="primary btn-lg" id="googleBtn4">Создать первую цель</button>
       </div>
+      <p class="muted" style="font-size:13px;margin-top:14px">Бесплатно · без карты · вход через Google</p>
     </div>
 
     <footer class="lfoot">
