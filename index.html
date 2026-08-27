@@ -1204,6 +1204,12 @@ document.addEventListener("change", e=>{
   if(cl.contains("pj-prio")&&holder){ proj(holder.dataset.id).prio=+t.value; touch(true); return; }
   if(cl.contains("task-prio")&&holder){ state.tasks.find(x=>x.id===holder.dataset.id).prio=+t.value; touch(true); return; }
   if(cl.contains("task-st")&&holder){ state.tasks.find(x=>x.id===holder.dataset.id).status=t.value; touch(true); return; }
+  if(t.dataset.f==="prob"&&holder){
+    /* «получено» = факт на 100%. Поставил вероятность < 100 — запись возвращается в «счёт» и считается прогнозом */
+    const inc=state.income.find(x=>x.id===holder.dataset.id);
+    if(inc && inc.status==="paid" && +t.value<100) inc.status="invoiced";
+    touch(true); return;
+  }
   if(t.dataset.f){ touch(true); return; } // blur после inline-правки — перерисовать производные
 });
 document.addEventListener("click", e=>{
