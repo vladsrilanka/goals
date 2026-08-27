@@ -409,6 +409,16 @@ const SUPA = { url:"https://xhyoltlrpfsneerivmab.supabase.co", key:"sb_publishab
 let state=null, artifactNS=null, dirty=false, saveTimer=null, supaMode=false, supaKey=null;
 let sb=null, session=null, authMode=false;
 let selWeek=null, dirView={}, debtsHidden = localStorage.getItem("u30_eye")!=="show";
+const BUILD="2026.08.27-13";
+try{
+  if(localStorage.getItem("u30_build")!==BUILD){
+    for(let i=localStorage.length-1;i>=0;i--){
+      const k=localStorage.key(i);
+      if(k&&(k.indexOf("u30_range_")===0||k.indexOf("u30_view_")===0)) localStorage.removeItem(k);
+    }
+    localStorage.setItem("u30_build",BUILD);
+  }
+}catch(e){}
 let taskRange={}, pipeFilter = localStorage.getItem("u30_pipe")||"all";
 
 function esc(s){ return String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c])); }
@@ -661,6 +671,7 @@ function renderSidebar(r){
     ftr.innerHTML=
       '<div class="prochip lbl-t"><b>PRO</b> · всё открыто<div style="margin-top:2px">спасибо, что строишь этот продукт</div></div>'+
       (em?'<div class="userrow"><span class="avatar">'+esc(ini)+'</span><span class="txt lbl-t">'+esc(em)+'</span></div>':'')+
+      '<div class="lbl-t muted" style="font-size:10.5px;margin-bottom:2px">сборка '+BUILD+'</div>'+
       '<div style="display:flex;gap:6px;flex-wrap:wrap">'+
         '<button class="sidebtn" id="themeBtn" title="Тема">◐</button>'+
         '<button class="sidebtn" id="sideToggle" title="Свернуть меню">‹</button>'+
@@ -765,13 +776,14 @@ function render(){
   renderSidebar(r);
   if(IS_SITE && !session){ renderLanding(); return; }
   const app=document.getElementById("app");
-  if (r.p==="goal") app.innerHTML=vGoalPage(r.id);
-  else if (r.p==="money") app.innerHTML=vMoney();
-  else if (r.p==="tasks") app.innerHTML=vTasksPage();
-  else if (r.p==="goaledit") app.innerHTML=vGoalEdit();
-  else if (r.p==="weeks") app.innerHTML = state.goal?vWeeks():'<section class="panel"><p class="muted">Сначала <a href="#/goal">создай главную цель</a> — недели считаются от её старта до дедлайна.</p></section>';
-  else if (r.p==="dir"){ const d=dir(r.id); app.innerHTML = d?vDir(d):'<p class="muted">Направление не найдено. <a href="#/">На главную</a></p>'; }
-  else app.innerHTML=vMain();
+  const draw=function(fn){ try{ return fn(); }catch(err){ console.error(err); return '<section class="panel"><h2>Не удалось отрисовать раздел</h2><p class="muted">'+esc(String(err&&err.message||err))+'</p><p class="muted" style="font-size:12.5px">Обнови страницу (Ctrl+F5). Если повторится — сообщи мне текст ошибки.</p></section>'; } };
+  if (r.p==="goal") app.innerHTML=draw(function(){return vGoalPage(r.id);});
+  else if (r.p==="money") app.innerHTML=draw(vMoney);
+  else if (r.p==="tasks") app.innerHTML=draw(vTasksPage);
+  else if (r.p==="goaledit") app.innerHTML=draw(vGoalEdit);
+  else if (r.p==="weeks") app.innerHTML = state.goal?draw(vWeeks):'<section class="panel"><p class="muted">Сначала <a href="#/goal">создай главную цель</a> — недели считаются от её старта до дедлайна.</p></section>';
+  else if (r.p==="dir"){ const d=dir(r.id); app.innerHTML = d?draw(function(){return vDir(d);}):'<p class="muted">Направление не найдено. <a href="#/">На главную</a></p>'; }
+  else app.innerHTML=draw(vMain);
   const eb=document.querySelector("[data-exp-box]"); if(eb) updExplore(eb);
   applyTheme();
 }
@@ -1201,6 +1213,10 @@ function cardDir(d){
     (t?'<div class="note">'+esc(t.title)+'</div>':'<div class="note">задач нет</div>')+
   '</div>';
 }
+function goalSel(cls,cur){
+  const opts=[["main","Уругвай"],...state.goals.map(g=>[g.id,g.name])];
+  return '<select class="slim '+cls+'">'+opts.map(([v,l])=>'<option value="'+v+'"'+(v===cur?" selected":"")+'>'+esc(l)+'</option>').join("")+'</select>';
+}
 function tblIncome(onlyGid){
   const hasGoals=state.goals.length>0 && !onlyGid;
   const list=state.income.filter(i=> onlyGid ? goalIdOf(i)===onlyGid : (pipeFilter==="all"||!state.goals.length||goalIdOf(i)===pipeFilter));
@@ -1459,9 +1475,17 @@ function vTasksSection(dirId){
     </form>
   </section>`;
 }
+function emptyTasks(dirId){
+  const scope=dirId||"all";
+  const total=state.tasks.filter(t=>!dirId||t.dirId===dirId).length;
+  const filtered=getRange(scope).mode!=="all";
+  if(total&&filtered) return '<p class="muted" style="margin:6px 0">Под фильтр периода не попало ни одной задачи (всего их '+total+'). '+
+    '<button class="ghost" data-resetrange="'+scope+'" style="padding:4px 10px;font-size:12.5px">Показать все</button></p>';
+  return '<p class="muted" style="margin:6px 0">Задач пока нет — добавь первую в форме ниже.</p>';
+}
 function vList(dirId){
   const ts=tasksSorted(dirId);
-  if(!ts.length) return '<p class="muted">Задач нет — добавь первую ниже.</p>';
+  if(!ts.length) return emptyTasks(dirId);
   const rows=ts.map(t=>`<tr data-id="${t.id}"${t.urgent?' style="background:color-mix(in srgb,var(--bad) 8%,transparent)"':''}>
     <td style="width:34px">${fireBtn(t)}</td>
     <td style="min-width:170px"><input class="inline ${t.status==="done"?"tdone":""}" data-f="title" value="${esc(t.title)}"></td>
@@ -1493,7 +1517,7 @@ function vKanban(dirId){
 }
 function vGantt(dirId){
   const ts=tasksSorted(dirId);
-  if(!ts.length) return '<p class="muted">Задач нет — добавь первую ниже.</p>';
+  if(!ts.length) return emptyTasks(dirId);
   const dated=ts.filter(t=>t.start&&t.due);
   const gb=rangeBounds(getRange(dirId||"all"));
   let min,max;
@@ -1589,6 +1613,8 @@ document.addEventListener("click", e=>{
   const wk=e.target.closest("[data-wk]");
   if(wk){ selWeek = selWeek===wk.dataset.wk?null:wk.dataset.wk; render(); return; }
 
+  const rr=e.target.closest("[data-resetrange]");
+  if(rr){ const sc=rr.dataset.resetrange; taskRange[sc]={mode:"all"}; saveRange(sc); render(); return; }
   const vb=e.target.closest("[data-view]");
   if(vb){ dirView[vb.dataset.scope]=vb.dataset.view; localStorage.setItem("u30_view_"+vb.dataset.scope, vb.dataset.view); render(); return; }
 
