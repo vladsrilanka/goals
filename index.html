@@ -851,7 +851,7 @@ function tblIncome(onlyGid){
     <td>${targetSel("inc-target",i.dirId,i.projId)}</td>
     ${hasGoals?'<td>'+goalSel("inc-goal",goalIdOf(i))+'</td>':''}
     <td class="r"><input class="amt num" data-f="amount" type="number" value="${+i.amount}"></td>
-    <td class="r"><input class="prob num" data-f="prob" type="number" min="0" max="100" value="${i.prob||0}" ${i.status==="paid"?"disabled":""}></td>
+    <td class="r"><input class="prob num" data-f="prob" type="number" min="0" max="100" value="${i.prob||0}" title="Вероятность, % (на цель влияет только у незакрытых сделок)"></td>
     <td>${sel("inc-st",i.status,INC_STATUSES)}</td>
     <td><input class="inline num" style="width:130px" data-f="date" type="date" value="${i.date||""}"></td>
     <td><button class="x" data-del="income" title="Удалить">×</button></td></tr>`).join("");
