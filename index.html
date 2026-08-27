@@ -479,6 +479,7 @@ function route(){
   const h=location.hash;
   if (h.startsWith("#/dir/")) return {p:"dir", id:h.slice(6)};
   if (h.startsWith("#/weeks")) return {p:"weeks"};
+  if (h.startsWith("#/g/")) return {p:"goal", id:h.slice(4)};
   if (h.startsWith("#/goal")) return {p:"goaledit"};
   return {p:"main"};
 }
@@ -528,7 +529,8 @@ function render(){
     '<a href="#/weeks" class="'+(r.p==="weeks"?"on":"")+'">Недели</a>'+
     (r.p==="dir"?'<a href="#/dir/'+r.id+'" class="on">'+esc((dir(r.id)||{}).name||"—")+'</a>':'');
   const app=document.getElementById("app");
-  if (r.p==="goaledit") app.innerHTML=vGoalEdit();
+  if (r.p==="goal") app.innerHTML=vGoalPage(r.id);
+  else if (r.p==="goaledit") app.innerHTML=vGoalEdit();
   else if (r.p==="weeks") app.innerHTML = state.goal?vWeeks():'<section class="panel"><p class="muted">Сначала <a href="#/goal">создай главную цель</a> — недели считаются от её старта до дедлайна.</p></section>';
   else if (r.p==="dir"){ const d=dir(r.id); app.innerHTML = d?vDir(d):'<p class="muted">Направление не найдено. <a href="#/">На главную</a></p>'; }
   else app.innerHTML=vMain();
@@ -559,8 +561,8 @@ function barCombo(gid, fact, target){
 }
 function vExplore(gid, fact, target){
   const deals=openDeals(gid);
-  if(!deals.length) return '<div class="explore muted" style="font-size:13px">Открытых сделок по этой цели нет — добавь их в пайплайн с вероятностью.</div>';
   return `<div class="explore" data-exp-box="${gid}" data-fact="${fact}" data-target="${target}">
+    ${deals.length?"":'<p class="muted" style="font-size:13px;margin:0 0 8px">Открытых сделок по этой цели пока нет — ползунок оживёт, когда добавишь сделки с вероятностью в пайплайн.</p>'}
     <div class="bar" style="height:12px"><i class="fc" style="opacity:.5" data-exp-pot></i><i style="width:${Math.min(100,fact/target*100)}%;opacity:.6" data-exp-fact></i></div>
     <input type="range" min="1" max="100" value="50" class="exp-sl" style="width:100%;accent-color:var(--accent)">
     <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--ink2);flex-wrap:wrap;gap:8px">
@@ -600,7 +602,7 @@ function vGoalArea(){
     out+=`<section class="panel">
       <div class="goalrow"><div class="goal-big num">${fmt(paid)} <small>из ${fmt(tgt)}</small></div>
         <span style="display:flex;gap:10px;align-items:center"><span class="muted num">${pct.toFixed(1)}%</span>
-          <a class="ghost" href="#/goal" style="padding:4px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px">⚙ настроить</a></span></div>
+          <a class="ghost" href="#/g/main" style="padding:4px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px">Страница цели →</a></span></div>
       ${barCombo("main", paid, tgt)}
       <div class="goalmeta" style="margin-top:8px">
         <span>Осталось: <b class="num">${fmt(Math.max(0,tgt-paid))}</b></span>
@@ -613,8 +615,9 @@ function vGoalArea(){
   if(extras.length){
     const g2=extras[0], p2=paidTotalGoal(g2.id), t2=+g2.target||1;
     out+=`<section class="panel">
-      <div class="goalrow"><div style="font-weight:600;font-size:18px">${esc(g2.name)} <small class="muted num" style="font-weight:400">${g2.deadline?"до "+g2.deadline:""}</small></div>
-        <span class="muted num">${Math.min(100,p2/t2*100).toFixed(1)}%</span></div>
+      <div class="goalrow"><div style="font-weight:600;font-size:18px"><a href="#/g/${g2.id}" style="color:var(--ink)">${esc(g2.name)}</a> <small class="muted num" style="font-weight:400">${g2.deadline?"до "+g2.deadline:""}</small></div>
+        <span style="display:flex;gap:10px;align-items:center"><span class="muted num">${Math.min(100,p2/t2*100).toFixed(1)}%</span>
+          <a class="ghost" href="#/g/${g2.id}" style="padding:4px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px">Страница цели →</a></span></div>
       <div class="goal-big num" style="font-size:24px">${fmt(p2)} <small>из ${fmt(g2.target)}</small></div>
       ${barCombo(g2.id, p2, t2)}
     </section>`;
@@ -623,6 +626,71 @@ function vGoalArea(){
   }
   return out;
 }
+/* ---------- goal page ---------- */
+function vGoalPage(gid){
+  const isMain=gid==="main";
+  const g=isMain?state.goal:state.goals.find(x=>x.id===gid);
+  if(!g) return '<section class="panel"><p class="muted">Цель не найдена. <a href="#/">На главную</a></p></section>';
+  const name=isMain?(g.title||"Моя цель"):g.name;
+  const paid=paidTotalGoal(gid), tgt=Math.max(1,isMain?goalTargetMain():+g.target||0);
+  let extra="";
+  if(isMain){
+    const dl=daysLeft(), pace=dl?Math.max(0,tgt-paid)/Math.max(1,dl/7):0;
+    let rem=paid;
+    const subs=(g.subs||[]).map(s=>{
+      const done=Math.max(0,Math.min(rem,+s.amount)); rem-=done;
+      return `<div class="subgoal"><span>${esc(s.label)} <b class="num">${fmt(s.amount)}</b></span>
+        <div class="bar" style="height:10px;margin:0"><i style="display:block;height:100%;border-radius:99px;background:var(--ok);width:${Math.min(100,s.amount?done/s.amount*100:0)}%"></i></div>
+        <span class="num muted">${fmt(done)} / ${fmt(s.amount)}</span></div>`;
+    }).join("");
+    extra='<div class="goalmeta" style="margin-top:8px"><span>Осталось: <b class="num">'+fmt(Math.max(0,tgt-paid))+'</b></span>'+
+      (dl?'<span>Дней до дедлайна: <b class="num">'+dl+'</b></span><span>Нужный темп: <b class="num">'+fmt(pace)+'/нед</b></span>':'')+'</div>'+
+      (subs?'<div class="subgoals">'+subs+'</div>':'');
+  } else if(g.deadline){
+    extra='<div class="goalmeta" style="margin-top:8px"><span>Дедлайн: <b class="num">'+g.deadline+'</b></span><span>Осталось: <b class="num">'+fmt(Math.max(0,tgt-paid))+'</b></span></div>';
+  }
+  const dirs=[...new Set(state.income.filter(i=>goalIdOf(i)===gid).map(i=>i.dirId).filter(Boolean))];
+  const rel=state.tasks.filter(t=>dirs.includes(t.dirId))
+    .sort((a,b)=>((b.urgent?1:0)-(a.urgent?1:0))||(b.prio-a.prio));
+  const taskRows=rel.map(t=>{
+    const st=(TASK_COLS.find(c=>c[0]===t.status)||["","?"])[1];
+    return '<tr><td>'+(t.urgent?"🔥 ":"")+'<span class="'+(t.status==="done"?"tdone":"")+'">'+esc(t.title)+'</span></td>'+
+      '<td class="muted">'+esc((dir(t.dirId)||{}).name||"—")+(t.projId&&proj(t.projId)?' / '+esc(proj(t.projId).name):'')+'</td>'+
+      '<td><span class="pill '+(t.status==="done"?"st-done":t.status==="doing"?"st-active":"st-idea")+'">'+st+'</span></td>'+
+      '<td class="muted">'+["","низкий","средний","высокий"][t.prio]+'</td>'+
+      '<td class="num muted">'+(t.due||"—")+'</td></tr>';
+  }).join("");
+  return `
+  <a class="backlink" href="#/">← На главную</a>
+  <section class="panel">
+    <div class="goalrow"><div style="font-weight:600;font-size:20px">${esc(name)}</div>
+      <a class="ghost" href="#/goal" style="padding:4px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px">⚙ настроить</a></div>
+    <div class="goal-big num" style="margin-top:4px">${fmt(paid)} <small>из ${fmt(tgt)} · ${Math.min(100,paid/tgt*100).toFixed(1)}%</small></div>
+    ${barCombo(gid, paid, tgt)}
+    ${extra}
+  </section>
+  <section class="panel">
+    <h2>Пайплайн этой цели</h2>
+    <div class="tscroll"><table id="incTable">${tblIncome(gid)}</table></div>
+    <form class="addrow" id="incForm">
+      <input name="title" placeholder="Что за доход (клиент, сделка…)" required>
+      ${targetSel("","","").replace('class="slim "','class="slim" name="target"')}
+      <input type="hidden" name="goal" value="${gid}">
+      <input name="amount" class="amt" type="number" min="0" step="1" placeholder="$" required>
+      <input name="prob" class="prob" type="number" min="0" max="100" step="5" value="50" title="Вероятность, %">
+      <select name="status" class="slim">${INC_STATUSES.filter(s=>s[0]!=="lost").map(([v,l])=>'<option value="'+v+'"'+(v==="paid"?" selected":"")+'>'+l+'</option>').join("")}</select>
+      <input name="date" type="date">
+      <button class="primary" type="submit">Добавить</button>
+    </form>
+    <p class="muted" style="font-size:13px;margin:10px 0 0">Всё, что добавишь здесь, автоматически привязано к цели «${esc(name)}».</p>
+  </section>
+  <section class="panel">
+    <h2>Задачи по цели</h2>
+    <p class="muted" style="margin-top:0;font-size:13px">Отчёт: задачи направлений, по которым идут доходы этой цели.</p>
+    ${taskRows?'<div class="tscroll"><table><thead><tr><th>Задача</th><th>Направление / проект</th><th>Статус</th><th>Приоритет</th><th>Дедлайн</th></tr></thead><tbody>'+taskRows+'</tbody></table></div>':'<p class="muted">Связанных задач пока нет — они появятся, когда у цели будут доходы с направлениями, а у направлений задачи.</p>'}
+  </section>`;
+}
+
 /* ---------- goal edit screen ---------- */
 function vGoalEdit(){
   const g=state.goal;
@@ -775,9 +843,9 @@ function goalSel(cls,cur){
   const opts=[["main","Уругвай"],...state.goals.map(g=>[g.id,g.name])];
   return '<select class="slim '+cls+'">'+opts.map(([v,l])=>'<option value="'+v+'"'+(v===cur?" selected":"")+'>'+esc(l)+'</option>').join("")+'</select>';
 }
-function tblIncome(){
-  const hasGoals=state.goals.length>0;
-  const list=state.income.filter(i=>pipeFilter==="all"||!hasGoals||goalIdOf(i)===pipeFilter);
+function tblIncome(onlyGid){
+  const hasGoals=state.goals.length>0 && !onlyGid;
+  const list=state.income.filter(i=> onlyGid ? goalIdOf(i)===onlyGid : (pipeFilter==="all"||!state.goals.length||goalIdOf(i)===pipeFilter));
   const rows=list.map(i=>`<tr data-id="${i.id}">
     <td style="min-width:150px"><input class="inline" data-f="title" value="${esc(i.title)}"></td>
     <td>${targetSel("inc-target",i.dirId,i.projId)}</td>
