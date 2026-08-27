@@ -421,7 +421,7 @@ const SUPA = { url:"https://xhyoltlrpfsneerivmab.supabase.co", key:"sb_publishab
 let state=null, artifactNS=null, dirty=false, saveTimer=null, supaMode=false, supaKey=null;
 let sb=null, session=null, authMode=false;
 let selWeek=null, dirView={}, debtsHidden = localStorage.getItem("u30_eye")!=="show";
-const BUILD="2026.08.27-17";
+const BUILD="2026.08.27-18";
 try{
   if(localStorage.getItem("u30_build")!==BUILD){
     for(let i=localStorage.length-1;i>=0;i--){
@@ -1160,7 +1160,11 @@ function vGoalEdit(){
   </section>
   <section class="panel"><h2>Аккаунт</h2>
     <p class="muted" style="margin:0 0 10px;font-size:13px" id="acctLine"></p>
-    <button class="ghost" id="logoutBtn2">Выйти из аккаунта</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="ghost" id="logoutBtn2">Выйти из аккаунта</button>
+      <button class="ghost" id="wipeAccount" style="color:var(--red)">Стереть все данные аккаунта</button>
+    </div>
+    <p class="muted" style="font-size:12px;margin:8px 0 0">Сброс удаляет цели, доходы, задачи и настройки этого аккаунта и запускает обучение заново. Другие аккаунты не затрагиваются.</p>
   </section>
   <section class="panel"><h2>Обучение</h2>
     <p class="muted" style="margin:0 0 10px;font-size:13px">Интерактивная экскурсия: цель, этапы, пайплайн, задачи. 10 коротких шагов.</p>
@@ -1766,6 +1770,18 @@ document.addEventListener("click", e=>{
     return;
   }
   if(e.target.id==="logoutBtn2"&&sb){ sb.auth.signOut(); return; }
+  if(e.target.id==="wipeAccount"){
+    if(!confirm("Точно стереть ВСЕ данные этого аккаунта? Цели, доходы, задачи, долги — всё будет удалено безвозвратно.")) return;
+    state=blankState();
+    try{ localStorage.removeItem(LS_KEY+"_"+(session&&session.user.id)); localStorage.removeItem("u30_tour"); localStorage.removeItem(LS_KEY); localStorage.removeItem("u30_key"); }catch(x){}
+    dirty=true;
+    (async function(){ try{ if(authMode&&session) await accountPush(); dirty=false; }catch(err){} })();
+    location.hash="#/";
+    render();
+    chip("","Аккаунт очищен");
+    setTimeout(function(){ maybeStartTour(); }, 400);
+    return;
+  }
   const segb=e.target.closest("#themeSeg button");
   if(segb){ try{ localStorage.setItem("u30_theme", segb.dataset.t); }catch(x){} applyTheme(); render(); return; }
   if(e.target.id==="themeBtn"){
@@ -2079,9 +2095,14 @@ async function accountPush(){
 async function accountLoad(){
   /* данные аккаунта — только из строки аккаунта (+ его личный офлайн-кэш). Никаких переносов чужого. */
   const remote=await accountFetch();
-  let cache=null;
-  try{ cache=migrate(JSON.parse(localStorage.getItem(LS_KEY+"_"+session.user.id))); }catch(e){}
-  state = newest(remote, cache) || blankState();
+  if(remote){
+    let cache=null;
+    try{ cache=migrate(JSON.parse(localStorage.getItem(LS_KEY+"_"+session.user.id))); }catch(e){}
+    state = newest(remote, cache);
+  } else {
+    /* первой записи в базе нет — аккаунт новый: старт строго с нуля, никаких локальных кэшей */
+    state = blankState();
+  }
   render();
   await accountPush();
 }
@@ -2094,6 +2115,7 @@ async function onAuthChanged(){
   renderAuth();
   if(session){
     chip("saving","Подключаю аккаунт…");
+    try{ localStorage.removeItem(LS_KEY); localStorage.removeItem("u30_key"); }catch(x){}
     try{ authMode=true; supaMode=false; await accountLoad(); chip("","✓ "+(session.user.email||"аккаунт")); maybeStartTour(); }
     catch(e){ authMode=false; chip("local","Аккаунт: ошибка сети — обнови страницу"); }
   } else {
