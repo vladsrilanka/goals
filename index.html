@@ -262,6 +262,11 @@
   .kadd{width:100%; border:1px dashed var(--line); background:transparent; color:var(--mut); border-radius:8px; padding:9px; font-size:12.5px; cursor:pointer}
   .kadd:hover{border-color:var(--accent); color:var(--accent-deep)}
   .tdone{text-decoration:line-through; opacity:.55}
+  tr.trow{cursor:grab} tr.trow:active{cursor:grabbing}
+  tr.trow:hover{background:var(--accent-soft)}
+  .tasktable td{padding:7px 8px}
+  .tasktable input.inline{font-size:13.5px}
+  .tasktable select.slim{max-width:100%}
   .gantt{--gl:230px; overflow-x:auto} .gantt .gin{min-width:640px}
   .gaxis{position:relative; height:38px; margin-left:var(--gl)}
   .gaxis span{position:absolute; bottom:0; transform:rotate(-52deg); transform-origin:left bottom; font-size:10px; color:var(--mut); white-space:nowrap}
@@ -409,7 +414,7 @@ const SUPA = { url:"https://xhyoltlrpfsneerivmab.supabase.co", key:"sb_publishab
 let state=null, artifactNS=null, dirty=false, saveTimer=null, supaMode=false, supaKey=null;
 let sb=null, session=null, authMode=false;
 let selWeek=null, dirView={}, debtsHidden = localStorage.getItem("u30_eye")!=="show";
-const BUILD="2026.08.27-13";
+const BUILD="2026.08.27-14";
 try{
   if(localStorage.getItem("u30_build")!==BUILD){
     for(let i=localStorage.length-1;i>=0;i--){
@@ -445,6 +450,7 @@ function migrate(s){
     }
     if(!s.settings) s.settings={ rubRate:100 };
     s.projects.forEach(p=>{ if(!p.prio) p.prio=2; });
+    s.tasks.forEach(function(t,i){ if(typeof t.ord!=="number") t.ord=i+1; if(typeof t.money!=="number") t.money=0; });
     return s;
   }
   const out = clone(DEFAULT_STATE);
@@ -905,6 +911,19 @@ function vSecondGoal(){
   </section>`;
 }
 
+function vMoneyTasks(){
+  const list=moneyTasks();
+  if(!list.length) return '<p class="muted" style="margin:0">Ни у одной задачи не указана сумма. В разделе «Задачи» впиши, сколько принесёт выполнение — и задача появится здесь.</p>';
+  const rows=list.map(function(t){
+    return '<tr data-id="'+t.id+'"><td>'+(t.urgent?"🔥 ":"")+'<span class="'+(t.status==="done"?"tdone":"")+'">'+esc(t.title)+'</span></td>'+
+      '<td class="muted">'+esc(targetLabel(t))+'</td>'+
+      '<td>'+sel("task-st",t.status,TASK_COLS)+'</td>'+
+      '<td class="r num" style="font-weight:600;color:'+(t.status==="done"?"var(--mut)":"var(--green)")+'">+'+fmt(taskAmt(t))+'</td></tr>';
+  }).join("");
+  const open=list.filter(function(t){ return t.status!=="done"; }).reduce(function(a2,t){ return a2+taskAmt(t); },0);
+  return '<div class="tscroll"><table><thead><tr><th>Задача</th><th>Направление / проект</th><th>Статус</th><th class="r">Принесёт</th></tr></thead><tbody>'+rows+'</tbody></table></div>'+
+    '<p class="muted" style="font-size:12.5px;margin:10px 0 0">В работе на <b class="num" style="color:var(--ink)">'+fmt(open)+'</b></p>';
+}
 function vMoney(){
   return `<div class="grid2b"><div>
   <section class="panel">
@@ -931,6 +950,10 @@ function vMoney(){
     <p class="muted" style="font-size:13px; margin:10px 0 0">В цель и прогресс-бар попадают только доходы со статусом «получено». Остальные (идея → переговоры → счёт) видны как «Прогноз из пайплайна»: сумма × вероятность. Пример: сделка на $1 000 с вероятностью 50% даёт $500 прогноза.</p>
   </section>
 
+  <section class="panel">
+    <div class="phead"><h2>Задачи, которые принесут деньги</h2><a href="#/tasks" style="font-size:12.5px">все задачи →</a></div>
+    ${vMoneyTasks()}
+  </section>
   </div><div>
   <section class="panel">
     <h2>Обязательные расходы (в месяц)</h2>
@@ -1424,18 +1447,13 @@ function vDir(d){
   </section>
   ${vTasksSection(d.id)}`;
 }
-function tasksSorted(dirId){
-  const bounds=rangeBounds(getRange(dirId||"all"));
-  return state.tasks.filter(t=>(!dirId||t.dirId===dirId) && (!bounds||taskInRange(t,bounds)))
-    .sort((a,b)=>((b.urgent?1:0)-(a.urgent?1:0)) || (b.prio-a.prio) || String(a.due||"9999").localeCompare(String(b.due||"9999")));
-}
+const PRIO_OPTS=[["3","высокий"],["2","средний"],["1","низкий"]];
 function taskTag(t, global){
   const d=dir(t.dirId), p=t.projId?proj(t.projId):null;
   const parts=[]; if(global&&d) parts.push(d.name); if(p) parts.push(p.name);
   return parts.length?esc(parts.join(" / ")):"";
 }
 function fireBtn(t){ return '<button class="x" data-fire title="Горящая задача" style="font-size:14px;padding:2px 4px;'+(t.urgent?'':'filter:grayscale(1);opacity:.4')+'">🔥</button>'; }
-const PRIO_OPTS=[["3","высокий"],["2","средний"],["1","низкий"]];
 function vTasksSection(dirId){
   const scope=dirId||"all";
   const stored=dirView[scope]||localStorage.getItem("u30_view_"+scope)||"list";
@@ -1459,6 +1477,7 @@ function vTasksSection(dirId){
     <div class="phead"><h2>${dirId?"Задачи":"Все задачи"}</h2>
       <div class="viewtog" style="flex-wrap:wrap">
         ${rangeUI}
+        ${sortUI(scope)}
         <button data-view="list" data-scope="${scope}" class="${view==="list"?"on":""}">Список</button>
         <button data-view="kanban" data-scope="${scope}" class="${view==="kanban"?"on":""}">Канбан</button>
         <button data-view="gantt" data-scope="${scope}" class="${view==="gantt"?"on":""}">Гант</button>
@@ -1467,6 +1486,7 @@ function vTasksSection(dirId){
     ${hiddenUndated?'<p class="muted" style="font-size:12.5px;margin:8px 0 0">Скрыто задач без дат: '+hiddenUndated+' — выбери «Всё время», чтобы увидеть, или проставь им даты.</p>':''}
     <form class="addrow taskForm" data-dir="${dirId||""}">
       <input name="title" placeholder="Новая задача" required>
+      <input name="money" class="amt" type="number" min="0" step="50" placeholder="принесёт $" title="Сколько денег принесёт выполнение">
       ${projOpts}
       <select name="prio" class="slim"><option value="3">высокий</option><option value="2" selected>средний</option><option value="1">низкий</option></select>
       <input name="start" type="date" title="Начало">
@@ -1483,20 +1503,76 @@ function emptyTasks(dirId){
     '<button class="ghost" data-resetrange="'+scope+'" style="padding:4px 10px;font-size:12.5px">Показать все</button></p>';
   return '<p class="muted" style="margin:6px 0">Задач пока нет — добавь первую в форме ниже.</p>';
 }
+function taskOrderInit(){
+  let mx=0; state.tasks.forEach(function(t){ if(typeof t.ord==="number") mx=Math.max(mx,t.ord); });
+  state.tasks.forEach(function(t){ if(typeof t.ord!=="number") t.ord=++mx; });
+}
+function getSort(scope){
+  try{ return localStorage.getItem("u30_sort_"+scope)||"manual"; }catch(e){ return "manual"; }
+}
+function setSort(scope,v){ try{ localStorage.setItem("u30_sort_"+scope,v); }catch(e){} }
+const SORTS=[["manual","Мой порядок"],["az","Название А-Я"],["za","Название Я-А"],["dir","Направление / проект"],["prio","Приоритет"],["status","Статус"],["start","Дата начала"],["due","Дедлайн"],["money","Сумма"]];
+function targetLabel(t){
+  const d=dir(t.dirId), p=t.projId?proj(t.projId):null;
+  return (d?d.name:"")+(p?" / "+p.name:"");
+}
+function tasksSorted(dirId){
+  taskOrderInit();
+  const scope=dirId||"all";
+  const bounds=rangeBounds(getRange(scope));
+  const list=state.tasks.filter(function(t){ return (!dirId||t.dirId===dirId) && (!bounds||taskInRange(t,bounds)); });
+  const mode=getSort(scope);
+  const byOrd=function(a,b){ return (a.ord||0)-(b.ord||0); };
+  const cmp={
+    manual: byOrd,
+    az: function(a,b){ return a.title.localeCompare(b.title,"ru")||byOrd(a,b); },
+    za: function(a,b){ return b.title.localeCompare(a.title,"ru")||byOrd(a,b); },
+    dir: function(a,b){ return targetLabel(a).localeCompare(targetLabel(b),"ru")||byOrd(a,b); },
+    prio: function(a,b){ return ((b.urgent?1:0)-(a.urgent?1:0))||(b.prio-a.prio)||byOrd(a,b); },
+    status: function(a,b){ const o={todo:0,doing:1,done:2}; return (o[a.status]-o[b.status])||byOrd(a,b); },
+    start: function(a,b){ return String(a.start||"9999").localeCompare(String(b.start||"9999"))||byOrd(a,b); },
+    due: function(a,b){ return String(a.due||"9999").localeCompare(String(b.due||"9999"))||byOrd(a,b); },
+    money: function(a,b){ return (+b.money||0)-(+a.money||0)||byOrd(a,b); }
+  }[mode]||byOrd;
+  return list.sort(cmp);
+}
+function sortUI(scope){
+  const cur=getSort(scope);
+  const label=(SORTS.find(function(s){ return s[0]===cur; })||SORTS[0])[1];
+  return '<span style="display:inline-flex;align-items:center;gap:6px">'+
+    '<span title="Сортировка списка" style="color:var(--mut)">⇅</span>'+
+    '<select class="slim task-sort" data-scope="'+scope+'" title="Сортировка: '+label+'">'+
+      SORTS.map(function(s){ return '<option value="'+s[0]+'"'+(cur===s[0]?" selected":"")+'>'+s[1]+'</option>'; }).join("")+
+    '</select></span>';
+}
+function moneyTasks(){
+  return state.tasks.filter(function(t){ return +t.money>0; })
+    .sort(function(a,b){ return (a.status==="done")-(b.status==="done") || (+b.money||0)-(+a.money||0); });
+}
+function taskAmt(t){ return t.mcur==="RUB" ? (+t.money||0)/rubRate() : (+t.money||0); }
 function vList(dirId){
   const ts=tasksSorted(dirId);
   if(!ts.length) return emptyTasks(dirId);
-  const rows=ts.map(t=>`<tr data-id="${t.id}"${t.urgent?' style="background:color-mix(in srgb,var(--bad) 8%,transparent)"':''}>
-    <td style="width:34px">${fireBtn(t)}</td>
-    <td style="min-width:170px"><input class="inline ${t.status==="done"?"tdone":""}" data-f="title" value="${esc(t.title)}"></td>
-    ${dirId?"":'<td class="muted" style="font-size:12.5px">'+taskTag(t,true)+'</td>'}
-    <td>${sel("task-prio",String(t.prio),PRIO_OPTS)}</td>
-    <td>${sel("task-st",t.status,TASK_COLS)}</td>
-    <td><input class="num" data-f="start" type="date" value="${t.start||""}" style="width:120px"></td>
-    <td><input class="num" data-f="due" type="date" value="${t.due||""}" style="width:120px"></td>
-    <td><button class="x" data-del="tasks">×</button></td></tr>`).join("");
-  return '<div class="tscroll"><table><thead><tr><th>🔥</th><th>Задача</th>'+(dirId?"":"<th>Направление / проект</th>")+
-    '<th>Приоритет</th><th>Статус</th><th>Начало</th><th>Дедлайн</th><th></th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+  const scope=dirId||"all";
+  const manual=getSort(scope)==="manual";
+  const rows=ts.map(function(t){
+    return '<tr data-id="'+t.id+'"'+(manual?' draggable="true" class="trow"':'')+(t.urgent?' style="background:color-mix(in srgb,var(--red) 7%,transparent)"':'')+'>'+
+      '<td style="width:30px">'+fireBtn(t)+'</td>'+
+      '<td style="min-width:300px;width:42%"><input class="inline '+(t.status==="done"?"tdone":"")+'" data-f="title" value="'+esc(t.title)+'"></td>'+
+      '<td style="min-width:190px">'+targetSel("task-target",t.dirId,t.projId)+'</td>'+
+      '<td style="width:118px" class="r"><input class="amt num" data-f="money" type="number" min="0" step="50" value="'+(+t.money||0)+'" placeholder="0" title="Сколько денег принесёт выполнение задачи">'+
+        '<select class="slim task-mcur" title="Валюта"><option value="USD"'+(t.mcur!=="RUB"?" selected":"")+'>$</option><option value="RUB"'+(t.mcur==="RUB"?" selected":"")+'>₽</option></select></td>'+
+      '<td style="width:110px">'+sel("task-prio",String(t.prio),PRIO_OPTS)+'</td>'+
+      '<td style="width:110px">'+sel("task-st",t.status,TASK_COLS)+'</td>'+
+      '<td style="width:120px"><input class="num" data-f="start" type="date" value="'+(t.start||"")+'" style="width:112px"></td>'+
+      '<td style="width:120px"><input class="num" data-f="due" type="date" value="'+(t.due||"")+'" style="width:112px"></td>'+
+      '<td style="width:28px"><button class="x" data-del="tasks">×</button></td></tr>';
+  }).join("");
+  return '<div class="tscroll"><table class="tasktable"><thead><tr>'+
+    '<th>🔥</th><th>Задача</th><th>Направление / проект</th><th class="r">Деньги</th>'+
+    '<th>Приоритет</th><th>Статус</th><th>Начало</th><th>Дедлайн</th><th></th></tr></thead>'+
+    '<tbody data-tasklist="'+scope+'">'+rows+'</tbody></table></div>'+
+    (manual?'<p class="muted" style="font-size:12px;margin:8px 0 0">Строки можно перетаскивать мышью — порядок сохранится.</p>':'');
 }
 function vKanban(dirId){
   const ts=tasksSorted(dirId);
@@ -1505,6 +1581,7 @@ function vKanban(dirId){
     const cards=items.map(t=>`<div class="kcard p${t.prio}" draggable="true" data-id="${t.id}">
       <input class="inline ${st==="done"?"tdone":""}" data-f="title" value="${esc(t.title)}">
       ${taskTag(t,!dirId)?'<div class="tag">'+taskTag(t,!dirId)+'</div>':''}
+      ${+t.money?'<div class="num" style="color:var(--green);font-weight:600;font-size:12.5px;margin-top:4px">+'+fmt(taskAmt(t))+'</div>':''}
       <div class="ctl">${fireBtn(t)}${sel("task-prio",String(t.prio),PRIO_OPTS)}
         ${ci>0?'<button class="mv" data-mv="-1" title="Назад">◀</button>':''}
         ${ci<2?'<button class="mv" data-mv="1" title="Вперёд">▶</button>':''}
@@ -1544,7 +1621,7 @@ function vGantt(dirId){
       bar='<div class="gbar2 p'+t.prio+(t.status==="done"?" done":"")+'" style="left:'+l+'%;width:'+w+'%" title="'+esc(t.title)+'"></div>';
     }
     return `<div class="grow2" data-id="${t.id}">
-      <div class="ttl"><span class="tname ${t.status==="done"?"tdone":""}">${t.urgent?"🔥 ":""}${esc(t.title)}</span>
+      <div class="ttl"><span class="tname ${t.status==="done"?"tdone":""}">${t.urgent?"🔥 ":""}${esc(t.title)}${+t.money?' <span class="num" style="color:var(--green)">+'+fmt(taskAmt(t))+'</span>':''}</span>
         <div class="dts"><input class="num" data-f="start" type="date" value="${t.start||""}"><input class="num" data-f="due" type="date" value="${t.due||""}"></div></div>
       <div class="gtrackwrap"><div class="ggrid">${lines}${today}</div>${bar}</div></div>`;
   }).join("");
@@ -1596,6 +1673,9 @@ document.addEventListener("change", e=>{
   if(cl.contains("dir-st")){ dir(t.dataset.dir).status=t.value; touch(true); return; }
   if(cl.contains("proj-st")&&holder){ proj(holder.dataset.id).status=t.value; touch(true); return; }
   if(cl.contains("pj-prio")&&holder){ proj(holder.dataset.id).prio=+t.value; touch(true); return; }
+  if(cl.contains("task-target")&&holder){ applyTarget(state.tasks.find(function(x){return x.id===holder.dataset.id;}), t.value); touch(true); return; }
+  if(cl.contains("task-mcur")&&holder){ state.tasks.find(function(x){return x.id===holder.dataset.id;}).mcur=t.value; touch(true); return; }
+  if(cl.contains("task-sort")){ setSort(t.dataset.scope, t.value); render(); return; }
   if(cl.contains("task-prio")&&holder){ state.tasks.find(x=>x.id===holder.dataset.id).prio=+t.value; touch(true); return; }
   if(cl.contains("task-st")&&holder){ state.tasks.find(x=>x.id===holder.dataset.id).status=t.value; touch(true); return; }
   if(t.dataset.f==="prob"&&holder){
@@ -1750,7 +1830,9 @@ document.addEventListener("submit", e=>{
     else { const tg=fd.get("target")||"";
       if(tg.startsWith("p:")){ const p=proj(tg.slice(2)); projId=p.id; dirId=p.dirId; }
       else if(tg.startsWith("d:")) dirId=tg.slice(2); }
-    state.tasks.push({ id:uid(), dirId, projId, title:fd.get("title"), prio:+fd.get("prio"), status:"todo", start:fd.get("start")||"", due:fd.get("due")||"", urgent:false });
+    taskOrderInit();
+    const maxOrd=state.tasks.reduce(function(m2,t2){ return Math.max(m2,t2.ord||0); },0);
+    state.tasks.push({ id:uid(), dirId:dirId, projId:projId, title:fd.get("title"), prio:+fd.get("prio"), status:"todo", start:fd.get("start")||"", due:fd.get("due")||"", urgent:false, money:+fd.get("money")||0, mcur:"USD", ord:maxOrd+1 });
   }
   else if(f.id==="adjForm") state.adjustments.push({ id:uid(), date:fd.get("date")||today(), balance:+fd.get("balance"), comment:fd.get("comment")||"" });
   else if(f.id==="goalForm") state.goals.push({ id:uid(), name:fd.get("title"), target:+fd.get("amount"), deadline:fd.get("due")||"" });
@@ -1764,6 +1846,37 @@ document.addEventListener("submit", e=>{
   touch(true);
 });
 window.addEventListener("hashchange", render);
+
+/* drag-and-drop строк списка задач */
+let dragRowId=null;
+document.addEventListener("dragstart", function(e){
+  const tr=e.target.closest&&e.target.closest("tr.trow");
+  if(tr){ dragRowId=tr.dataset.id; tr.style.opacity=".45"; e.dataTransfer.effectAllowed="move"; }
+});
+document.addEventListener("dragend", function(e){
+  const tr=e.target.closest&&e.target.closest("tr.trow");
+  if(tr) tr.style.opacity="";
+});
+document.addEventListener("dragover", function(e){
+  if(!dragRowId) return;
+  const tr=e.target.closest&&e.target.closest("tr.trow");
+  if(tr) e.preventDefault();
+});
+document.addEventListener("drop", function(e){
+  if(!dragRowId) return;
+  const tr=e.target.closest&&e.target.closest("tr.trow");
+  if(!tr) return;
+  e.preventDefault();
+  const overId=tr.dataset.id;
+  if(overId===dragRowId){ dragRowId=null; return; }
+  taskOrderInit();
+  const ids=Array.prototype.slice.call(tr.closest("tbody").querySelectorAll("tr.trow")).map(function(x){ return x.dataset.id; });
+  const from=ids.indexOf(dragRowId), to=ids.indexOf(overId);
+  ids.splice(to,0,ids.splice(from,1)[0]);
+  ids.forEach(function(id,i){ const t=state.tasks.find(function(x){return x.id===id;}); if(t) t.ord=i+1; });
+  dragRowId=null;
+  touch(true);
+});
 
 /* drag-and-drop канбана */
 let dragTaskId=null;
