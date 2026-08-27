@@ -249,6 +249,7 @@
     <div id="hdr" style="flex:1;min-width:240px"></div>
     <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
       <span id="authbox"></span>
+      <button class="ghost" id="themeBtn" title="Тема: авто / светлая / тёмная" style="padding:4px 10px;border:1px solid var(--line);border-radius:8px;background:transparent;color:var(--ink2)">◐</button>
       <span class="savechip" id="savechip">Загрузка…</span>
     </span>
   </header>
@@ -299,6 +300,7 @@ const DEFAULT_STATE = {
     { id:"t7", dirId:"html",   projId:"solit",  title:"Доделать 30% и отправить издателям", prio:2, status:"todo" },
     { id:"t8", dirId:"html",   projId:"kub",    title:"Дождаться модерации Яндекс Игр", prio:1, status:"doing" }
   ],
+  settings:{ rubRate:100 },
   income:[], goals:[], expensesFixed: FIXED_DEFAULT.map(x=>({...x})),
   expensesAdhoc:[], debts:[], adjustments:[]
 };
@@ -338,6 +340,7 @@ function migrate(s){
         { id:"s2", label:s.goal.sub2Label||"Переезд", amount:+s.goal.moveNeed||20000 }
       ];
     }
+    if(!s.settings) s.settings={ rubRate:100 };
     s.projects.forEach(p=>{ if(!p.prio) p.prio=2; });
     return s;
   }
@@ -395,28 +398,30 @@ function fmtD(d){ return String(d.getDate()).padStart(2,"0")+"."+String(d.getMon
 function inRange(iso,a,b){ if(!iso) return false; const d=new Date(iso+"T12:00"); return d>=a && d<b; }
 function paidIn(a,b,dirId){
   return state.income.filter(i=>i.status==="paid" && inRange(i.date,a,b) && (!dirId || i.dirId===dirId))
-    .reduce((s,i)=>s+ +i.amount,0);
+    .reduce((s,i)=>s+amtOf(i),0);
 }
 function adhocIn(a,b){ return state.expensesAdhoc.filter(e=>inRange(e.date,a,b)).reduce((s,e)=>s+ +e.amount,0); }
 function debtPayIn(a,b){
   let s=0; for(const d of state.debts) for(const p of (d.payments||[])) if(inRange(p.date,a,b)) s+=+p.amount;
   return s;
 }
-function paidTotal(dirId){ return state.income.filter(i=>i.status==="paid" && (!dirId||i.dirId===dirId)).reduce((s,i)=>s+ +i.amount,0); }
+function paidTotal(dirId){ return state.income.filter(i=>i.status==="paid" && (!dirId||i.dirId===dirId)).reduce((s,i)=>s+amtOf(i),0); }
 function weighted(dirId){
   return state.income.filter(i=>["idea","talks","invoiced"].includes(i.status) && (!dirId||i.dirId===dirId))
-    .reduce((s,i)=>s+i.amount*(i.prob||0)/100,0);
+    .reduce((s,i)=>s+amtOf(i)*(i.prob||0)/100,0);
 }
 function daysLeft(){ if(!state.goal||!state.goal.deadline) return 0; return Math.max(0,Math.ceil((new Date(state.goal.deadline+"T23:59:59")-new Date())/864e5)); }
 function goalTargetMain(){ const g=state.goal; if(!g) return 0; const s=(g.subs||[]).reduce((a,x)=>a+ +x.amount,0); return s||+g.target||0; }
 function openDeals(gid){ return state.income.filter(i=>["idea","talks","invoiced"].includes(i.status)&&goalIdOf(i)===gid); }
-function maxPotential(gid){ return openDeals(gid).reduce((s,i)=>s+ +i.amount,0); }
+function maxPotential(gid){ return openDeals(gid).reduce((s,i)=>s+amtOf(i),0); }
 /* денежные цели: main = Уругвай, остальные в state.goals */
 function goalIdOf(i){ return i.goalId||"main"; }
-function paidTotalGoal(gid){ return state.income.filter(i=>i.status==="paid"&&goalIdOf(i)===gid).reduce((s,i)=>s+ +i.amount,0); }
+function rubRate(){ return Math.max(1,(state.settings&&+state.settings.rubRate)||100); }
+function amtOf(i){ return i.cur==="RUB" ? (+i.amount||0)/rubRate() : (+i.amount||0); }
+function paidTotalGoal(gid){ return state.income.filter(i=>i.status==="paid"&&goalIdOf(i)===gid).reduce((s,i)=>s+amtOf(i),0); }
 function weightedGoal(gid){
   return state.income.filter(i=>["idea","talks","invoiced"].includes(i.status)&&goalIdOf(i)===gid)
-    .reduce((s,i)=>s+i.amount*(i.prob||0)/100,0);
+    .reduce((s,i)=>s+amtOf(i)*(i.prob||0)/100,0);
 }
 function goalName(gid){ if(gid==="main") return "Уругвай"; const g=state.goals.find(g=>g.id===gid); return g?g.name:"—"; }
 /* фильтр задач по времени (per-scope) */
@@ -495,7 +500,7 @@ function renderHeader(){
   if(sc) sc.style.display="";
   const g=state.goal;
   if(!g){ el.innerHTML='<h1 style="font-size:26px">Мои цели</h1><p class="sub" style="margin:2px 0 0">Создай главную цель — и всё закрутится.</p>'; return; }
-  el.innerHTML='<h1 style="font-size:26px">'+esc(g.title||"Моя цель")+'</h1>'+
+  el.innerHTML='<h1 style="font-size:26px">'+(g.emoji?esc(g.emoji)+" ":"")+esc(g.title||"Моя цель")+'</h1>'+
     '<p class="sub" style="margin:2px 0 0"><span class="num">'+fmt(goalTargetMain())+'</span>'+
     (g.deadline?' до <span class="num">'+g.deadline+'</span>':'')+
     (g.weeklyMin?' · минимум <span class="num">'+fmt(g.weeklyMin)+'</span>/нед':'')+
@@ -586,12 +591,12 @@ function updExplore(box){
   const gid=box.dataset.expBox, fact=+box.dataset.fact, target=+box.dataset.target;
   const thr=+box.querySelector(".exp-sl").value;
   const deals=openDeals(gid);
-  const pot=fact+deals.filter(d=>(d.prob||0)>=thr).reduce((s,d)=>s+ +d.amount,0);
+  const pot=fact+deals.filter(d=>(d.prob||0)>=thr).reduce((s,d)=>s+amtOf(d),0);
   box.querySelector("[data-exp-pot]").style.width=Math.min(100,pot/target*100)+"%";
   box.querySelector("[data-exp-thr]").textContent="≥ "+thr+"%";
   box.querySelector("[data-exp-amt]").textContent=fmt(pot);
   box.querySelector("[data-exp-deals]").innerHTML=deals.slice().sort((a,b)=>(b.prob||0)-(a.prob||0)).map(d=>
-    '<span style="'+((d.prob||0)>=thr?'':'opacity:.35;text-decoration:line-through')+'">'+esc(d.title)+' <b class="num">'+fmt(d.amount)+'</b> · '+(d.prob||0)+'%</span>').join("");
+    '<span style="'+((d.prob||0)>=thr?'':'opacity:.35;text-decoration:line-through')+'">'+esc(d.title)+' <b class="num">'+fmt(amtOf(d))+'</b> · '+(d.prob||0)+'%</span>').join("");
 }
 function vGoalArea(){
   const g=state.goal;
@@ -625,7 +630,7 @@ function vGoalArea(){
   if(extras.length){
     const g2=extras[0], p2=paidTotalGoal(g2.id), t2=+g2.target||1;
     out+=`<section class="panel">
-      <div class="goalrow"><div style="font-weight:600;font-size:18px"><a href="#/g/${g2.id}" style="color:var(--ink)">${esc(g2.name)}</a> <small class="muted num" style="font-weight:400">${g2.deadline?"до "+g2.deadline:""}</small></div>
+      <div class="goalrow"><div style="font-weight:600;font-size:18px"><a href="#/g/${g2.id}" style="color:var(--ink)">${g2.emoji?esc(g2.emoji)+" ":""}${esc(g2.name)}</a> <small class="muted num" style="font-weight:400">${g2.deadline?"до "+g2.deadline:""}</small></div>
         <span style="display:flex;gap:10px;align-items:center"><span class="muted num">${Math.min(100,p2/t2*100).toFixed(1)}%</span>
           <a class="ghost" href="#/g/${g2.id}" style="padding:4px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px">Страница цели →</a></span></div>
       <div class="goal-big num" style="font-size:24px">${fmt(p2)} <small>из ${fmt(g2.target)}</small></div>
@@ -640,16 +645,20 @@ function vMoney(){
   return `
   <section class="panel">
     <div class="phead"><h2>Пайплайн доходов</h2>
+      <span style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <button class="ghost" id="csvBtn" title="Скачать все доходы в CSV (для таблиц и налогов)">⬇ CSV</button>
       ${state.goals.length?'<div class="viewtog" style="flex-wrap:wrap">'+
-        [["all","Все цели"],["main","Уругвай"],...state.goals.map(g=>[g.id,g.name])]
+        [["all","Все цели"],["main",(state.goal&&state.goal.title)||"Главная"],...state.goals.map(g=>[g.id,g.name])]
           .map(([v,l])=>'<button class="pf'+(pipeFilter===v?" on":"")+'" data-pf="'+v+'">'+esc(l)+'</button>').join("")+'</div>':''}
+      </span>
     </div>
     <div class="tscroll"><table id="incTable">${tblIncome()}</table></div>
     <form class="addrow" id="incForm">
       <input name="title" placeholder="Что за доход (клиент, сделка…)" required>
       ${targetSel("","","").replace('class="slim "','class="slim" name="target"')}
       ${state.goals.length?goalSel("",pipeFilter!=="all"?pipeFilter:"main").replace('class="slim "','class="slim" name="goal" title="Цель"'):""}
-      <input name="amount" class="amt" type="number" min="0" step="1" placeholder="$" required>
+      <input name="amount" class="amt" type="number" min="0" step="1" placeholder="Сумма" required>
+      <select name="cur" class="slim" title="Валюта"><option value="USD">$</option><option value="RUB">₽</option></select>
       <input name="prob" class="prob" type="number" min="0" max="100" step="5" value="50" title="Вероятность, %">
       <select name="status" class="slim">${INC_STATUSES.filter(s=>s[0]!=="lost").map(([v,l])=>'<option value="'+v+'"'+(v==="paid"?" selected":"")+'>'+l+'</option>').join("")}</select>
       <input name="date" type="date">
@@ -734,7 +743,7 @@ function vGoalPage(gid){
   return `
   <a class="backlink" href="#/">← На главную</a>
   <section class="panel">
-    <div class="goalrow"><div style="font-weight:600;font-size:20px">${esc(name)}</div>
+    <div class="goalrow"><div style="font-weight:600;font-size:20px">${g.emoji?esc(g.emoji)+" ":""}${esc(name)}</div>
       <a class="ghost" href="#/goal" style="padding:4px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px">⚙ настроить</a></div>
     <div class="goal-big num" style="margin-top:4px">${fmt(paid)} <small>из ${fmt(tgt)} · ${Math.min(100,paid/tgt*100).toFixed(1)}%</small></div>
     ${barCombo(gid, paid, tgt)}
@@ -747,7 +756,8 @@ function vGoalPage(gid){
       <input name="title" placeholder="Что за доход (клиент, сделка…)" required>
       ${targetSel("","","").replace('class="slim "','class="slim" name="target"')}
       <input type="hidden" name="goal" value="${gid}">
-      <input name="amount" class="amt" type="number" min="0" step="1" placeholder="$" required>
+      <input name="amount" class="amt" type="number" min="0" step="1" placeholder="Сумма" required>
+      <select name="cur" class="slim" title="Валюта"><option value="USD">$</option><option value="RUB">₽</option></select>
       <input name="prob" class="prob" type="number" min="0" max="100" step="5" value="50" title="Вероятность, %">
       <select name="status" class="slim">${INC_STATUSES.filter(s=>s[0]!=="lost").map(([v,l])=>'<option value="'+v+'"'+(v==="paid"?" selected":"")+'>'+l+'</option>').join("")}</select>
       <input name="date" type="date">
@@ -771,7 +781,8 @@ function vGoalEdit(){
   } else {
     main=`
     <div class="mrow" style="margin-bottom:12px; align-items:end; gap:12px">
-      <span style="flex:1;min-width:220px"><label class="mini">Название</label><input class="goal-f" data-g="title" value="${esc(g.title||"")}" style="width:100%"></span>
+      <span><label class="mini">Образ</label><input class="goal-f" data-g="emoji" value="${esc(g.emoji||"")}" maxlength="4" placeholder="🚗" style="width:64px;text-align:center;font-size:18px" title="Эмодзи цели — вещь, к которой идёшь"></span>
+      <span style="flex:1;min-width:200px"><label class="mini">Название</label><input class="goal-f" data-g="title" value="${esc(g.title||"")}" style="width:100%"></span>
       <span><label class="mini">Дедлайн</label><input class="goal-f num" data-g="deadline" type="date" value="${g.deadline||""}"></span>
       <span><label class="mini">Минимум в неделю, $</label><input class="goal-f amt num" data-g="weeklyMin" type="number" value="${g.weeklyMin||0}"></span>
     </div>
@@ -797,6 +808,7 @@ function vGoalEdit(){
     <p class="muted" style="margin-top:0;font-size:13px">На главной целиком показывается одна дополнительная цель (первая в списке); у неё тот же функционал, что у главной. Доходы привязываются к целям в пайплайне.</p>
     <div class="tscroll"><table><tbody>
       ${state.goals.map(gg=>`<tr data-id="${gg.id}">
+        <td style="width:56px"><input class="inline" data-f="emoji" value="${esc(gg.emoji||"")}" maxlength="4" placeholder="🦷" style="text-align:center;font-size:16px"></td>
         <td><input class="inline" data-f="name" value="${esc(gg.name)}"></td>
         <td class="r"><input class="amt num" data-f="target" type="number" value="${+gg.target}"></td>
         <td><input class="num" data-f="deadline" type="date" value="${gg.deadline||""}" style="width:135px"></td>
@@ -809,6 +821,74 @@ function vGoalEdit(){
       <input name="due" type="date" title="Дедлайн (необязательно)">
       <button class="primary" type="submit">Добавить цель</button>
     </form>
+  </section>
+  <section class="panel"><h2>Валюта</h2>
+    <p class="muted" style="margin-top:0;font-size:13px">Доходы можно записывать в рублях — они пересчитаются в доллары по этому курсу. Курс ручной: никаких банков и API, поменяешь сам, когда захочешь.</p>
+    <label class="mini">Курс: рублей за $1</label>
+    <input class="set-rate amt num" type="number" min="1" step="0.5" value="${(state.settings&&state.settings.rubRate)||100}" style="width:110px">
+  </section>`;
+}
+
+/* ---------- pace & focus ---------- */
+function paceStats(){
+  let need=0;
+  const add=(remain,deadline)=>{
+    if(!deadline||remain<=0) return;
+    const wl=Math.max(1,(new Date(deadline+"T23:59:59")-new Date())/6048e5);
+    need+=remain/wl;
+  };
+  if(state.goal) add(goalTargetMain()-paidTotalGoal("main"), state.goal.deadline);
+  for(const g of state.goals) add((+g.target||0)-paidTotalGoal(g.id), g.deadline);
+  const now=new Date();
+  const pace=state.income.filter(i=>i.status==="paid"&&inRange(i.date,addD(now,-28),addD(now,1)))
+    .reduce((s,i)=>s+amtOf(i),0)/4;
+  return { need, pace, wgt: weighted() };
+}
+function vPace(){
+  const {need,pace,wgt}=paceStats();
+  if(!need) return "";
+  const cov=pace/need;
+  const cls=cov>=1?"ok":cov>=0.6?"warn":"bad";
+  const col=cls==="ok"?"var(--ok)":cls==="warn"?"var(--warn)":"var(--bad)";
+  const msg=cls==="ok"
+    ? "Темп держится — при таком заработке цели закроются к дедлайнам."
+    : cls==="warn"
+    ? "Темп проседает. Закрой сделки из пайплайна — они покрывают разрыв."
+    : "Темпа не хватает. Смотри «Сфокусируйся» ниже: эти задачи двигают деньги.";
+  return `<section class="panel" style="border-left:4px solid ${col}">
+    <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+      <span style="width:16px;height:16px;border-radius:99px;background:${col};flex:none"></span>
+      <span>Чтобы закрыть все цели к дедлайнам: <b class="num">${fmt(need)}/нед</b></span>
+      <span class="muted">·</span>
+      <span>Твой темп (4 недели): <b class="num" style="color:${col}">${fmt(pace)}/нед</b></span>
+      ${wgt?'<span class="muted">·</span><span>В пайплайне ждёт: <b class="num">'+fmt(wgt)+'</b></span>':''}
+    </div>
+    <p class="muted" style="margin:8px 0 0;font-size:13px">${msg}</p>
+  </section>`;
+}
+function focusTasks(){
+  const dirMoney={};
+  for(const i of state.income)
+    if(["idea","talks","invoiced"].includes(i.status)&&i.dirId)
+      dirMoney[i.dirId]=(dirMoney[i.dirId]||0)+amtOf(i)*(i.prob||0)/100;
+  const maxDM=Math.max(1,...Object.values(dirMoney),1);
+  const dlScore=t=>{ if(!t.due) return 0; const d=(new Date(t.due+"T12:00")-new Date())/864e5; return d<0?3:d<7?2:d<30?1:0; };
+  return state.tasks.filter(t=>t.status!=="done")
+    .map(t=>({t, m:dirMoney[t.dirId]||0, s:(t.urgent?1000:0)+t.prio*100+((dirMoney[t.dirId]||0)/maxDM)*80+dlScore(t)*40}))
+    .sort((a,b)=>b.s-a.s).slice(0,3);
+}
+function vFocus(){
+  const top=focusTasks();
+  if(!top.length) return "";
+  return `<section class="panel">
+    <h2>Сфокусируйся сегодня</h2>
+    <p class="muted" style="margin:0 0 10px;font-size:13px">Сервис считает по твоим приоритетам, дедлайнам и деньгам в пайплайне, какие задачи сейчас двигают цели сильнее всего.</p>
+    ${top.map(({t,m})=>`<div style="display:flex;gap:10px;align-items:baseline;padding:7px 0;border-top:1px solid var(--line);flex-wrap:wrap">
+      <span>${t.urgent?"🔥 ":""}<a href="#/dir/${t.dirId}" style="color:var(--ink);font-weight:500">${esc(t.title)}</a></span>
+      <span class="muted" style="font-size:12.5px">${esc((dir(t.dirId)||{}).name||"")}</span>
+      ${m?'<span class="pill st-talks num" title="взвешенный пайплайн направления">≈'+fmt(m)+' в игре</span>':''}
+      ${t.due?'<span class="muted num" style="font-size:12.5px">до '+t.due+'</span>':''}
+    </div>`).join("")}
   </section>`;
 }
 
@@ -823,14 +903,18 @@ function vMain(){
 
   const tile=(lbl,val,hint,frac,cls,href)=>'<a class="tile '+cls+'" href="'+(href||"#/")+'"><div class="lbl">'+lbl+'</div><div class="val num">'+val+'</div><div class="hint">'+hint+'</div><div class="minibar"><i style="width:'+Math.min(100,frac*100)+'%"></i></div></a>';
 
+  const freeCash = mo - fx - adhocMo - debtPayIn(ma,mb);
   return `
   ${vGoalArea()}
+  ${vPace()}
   <section class="tiles">
     ${tile("Эта неделя · "+fmtD(wa)+"–"+fmtD(addD(wb,-1)), fmt(wk), wmin?"минимум "+fmt(wmin):"доход за неделю", wmin?wk/wmin:(wk?1:0), wmin?(wk>=wmin?"good":"bad"):"", "#/weeks")}
     ${tile("Этот месяц · "+mName, fmt(mo), "минимум "+fmt(fx)+" (обяз. расходы)", mo/Math.max(1,fx), mo>=fx?"good":"", "#/money")}
     ${tile("Прогноз из пайплайна", fmt(wgtAll), "открытые сделки × их вероятность (все цели)", Math.min(1,wgtAll/Math.max(1,tgt-paid)), "", "#/money")}
     ${tile("Расходы · "+mName, fmt(fx+adhocMo), "обязательные "+fmt(fx)+" + разовые "+fmt(adhocMo), 1, "", "#/money")}
+    ${tile("Свободно на цели · "+mName, fmt(freeCash), "доход − обязательные − разовые − долги", freeCash>0?1:0, freeCash>=0?"good":"bad", "#/money")}
   </section>
+  ${vFocus()}
 
   <section class="panel">
     <div class="phead"><h2>Направления</h2></div>
@@ -865,7 +949,7 @@ function tblIncome(onlyGid){
     <td style="min-width:150px"><input class="inline" data-f="title" value="${esc(i.title)}"></td>
     <td>${targetSel("inc-target",i.dirId,i.projId)}</td>
     ${hasGoals?'<td>'+goalSel("inc-goal",goalIdOf(i))+'</td>':''}
-    <td class="r"><input class="amt num" data-f="amount" type="number" value="${+i.amount}"></td>
+    <td class="r" style="white-space:nowrap"><input class="amt num" data-f="amount" type="number" value="${+i.amount}"><select class="slim inc-cur" title="Валюта"><option value="USD"${i.cur!=="RUB"?" selected":""}>$</option><option value="RUB"${i.cur==="RUB"?" selected":""}>₽</option></select>${i.cur==="RUB"?'<div class="muted num" style="font-size:11px">= '+fmt(amtOf(i))+'</div>':''}</td>
     <td class="r"><input class="prob num" data-f="prob" type="number" min="0" max="100" value="${i.prob||0}" title="Вероятность, % (на цель влияет только у незакрытых сделок)"></td>
     <td>${sel("inc-st",i.status,INC_STATUSES)}</td>
     <td><input class="inline num" style="width:130px" data-f="date" type="date" value="${i.date||""}"></td>
@@ -896,7 +980,13 @@ function tblAdhoc(){
 }
 function vDebts(){
   if(!state.debts.length) return '<p class="muted">Долгов нет — так держать. Если есть, добавь ниже: они не влияют на прогресс к цели.</p>';
-  return state.debts.map(d=>{
+  const lumps=state.debts.filter(d=>d.type!=="bank")
+    .map(d=>({id:d.id, rem:Math.max(0,(+d.total||0)-(d.payments||[]).reduce((s,p)=>s+ +p.amount,0))}))
+    .filter(x=>x.rem>0).sort((a,b)=>a.rem-b.rem);
+  const firstId=lumps.length?lumps[0].id:null;
+  const sorted=state.debts.slice().sort((a,b)=>(a.id===firstId?-1:0)-(b.id===firstId?-1:0));
+  return sorted.map(d=>{
+    const snow=d.id===firstId?'<span class="pill st-invoiced" title="Метод снежного кома: сначала гасится наименьший остаток — быстрые победы держат мотивацию">гаси первым</span> ':'';
     if(d.type==="bank"){
       return `<div class="debt" data-id="${d.id}">
         <div class="head"><b class="v">${esc(d.title)}</b>
@@ -909,7 +999,7 @@ function vDebts(){
     const paid=(d.payments||[]).reduce((s,p)=>s+ +p.amount,0);
     const pct=Math.min(100,d.total?paid/d.total*100:0);
     return `<div class="debt" data-id="${d.id}">
-      <div class="head"><b class="v">${esc(d.title)}</b>
+      <div class="head"><b class="v">${snow}${esc(d.title)}</b>
         <span class="num v">${fmt(paid)} / ${fmt(d.total||0)} ${d.due?'· до '+d.due:''}</span>
         <button class="x" data-del="debts">×</button></div>
       <div class="bar"><i style="width:${pct}%"></i></div>
@@ -955,7 +1045,7 @@ function vWeeks(){
     const incs=state.income.filter(i=>i.status==="paid"&&inRange(i.date,a,b));
     const exps=state.expensesAdhoc.filter(e=>inRange(e.date,a,b));
     const pays=[]; for(const d of state.debts) for(const p of (d.payments||[])) if(inRange(p.date,a,b)) pays.push({...p,debt:d.title});
-    const inc=incs.reduce((s,i)=>s+ +i.amount,0), out=exps.reduce((s,e)=>s+ +e.amount,0), dp=pays.reduce((s,p)=>s+ +p.amount,0);
+    const inc=incs.reduce((s,i)=>s+amtOf(i),0), out=exps.reduce((s,e)=>s+ +e.amount,0), dp=pays.reduce((s,p)=>s+ +p.amount,0);
     detail=`<h3 style="margin-bottom:8px">Неделя ${fmtD(a)}–${fmtD(addD(b,-1))}</h3>
       <div class="mrow" style="margin-bottom:10px">
         <div class="mcell"><div class="lbl">Доход</div><div class="v2 num pos">+${fmt(inc)}</div></div>
@@ -963,7 +1053,7 @@ function vWeeks(){
         <div class="mcell"><div class="lbl">Долги</div><div class="v2 num ${dp?"neg":""}">−${fmt(dp)}</div></div>
         <div class="mcell"><div class="lbl">Чистыми</div><div class="v2 num ${inc-out-dp>=0?"pos":"neg"}">${fmt(inc-out-dp)}</div></div>
       </div>
-      ${incs.length?'<p><b>Доходы:</b> '+incs.map(i=>esc(i.title)+' <span class="num pos">+'+fmt(i.amount)+'</span> <span class="muted">('+esc(incLabel(i))+')</span>').join(" · ")+'</p>':''}
+      ${incs.length?'<p><b>Доходы:</b> '+incs.map(i=>esc(i.title)+' <span class="num pos">+'+fmt(amtOf(i))+'</span> <span class="muted">('+esc(incLabel(i))+')</span>').join(" · ")+'</p>':''}
       ${exps.length?'<p><b>Расходы:</b> '+exps.map(e=>esc(e.title)+' <span class="num neg">−'+fmt(e.amount)+'</span>').join(" · ")+'</p>':''}
       ${pays.length?'<p><b>Платежи по долгам:</b> '+pays.map(p=>esc(p.debt)+' <span class="num neg">−'+fmt(p.amount)+'</span>').join(" · ")+'</p>':''}
       ${(!incs.length&&!exps.length&&!pays.length)?'<p class="muted">Записей нет.</p>':''}`;
@@ -1048,7 +1138,7 @@ function vDir(d){
         <td><input class="inline" data-f="name" value="${esc(p.name)}"></td>
         <td>${prioSel("pj-prio",p.prio||2)}</td>
         <td>${sel("proj-st",p.status,WORK_STATUSES)}</td>
-        <td class="r num muted">всего ${fmt(state.income.filter(i=>i.projId===p.id&&i.status==="paid").reduce((s,i)=>s+ +i.amount,0))}</td>
+        <td class="r num muted">всего ${fmt(state.income.filter(i=>i.projId===p.id&&i.status==="paid").reduce((s,i)=>s+amtOf(i),0))}</td>
         <td><button class="x" data-del="projects">×</button></td></tr>`).join("")||'<tr><td class="muted">Проектов пока нет.</td></tr>'}
     </tbody></table></div>
     <form class="addrow" id="projForm" data-dir="${d.id}">
@@ -1210,6 +1300,8 @@ document.addEventListener("change", e=>{
   }
   if(cl.contains("inc-target")&&holder){ applyTarget(state.income.find(x=>x.id===holder.dataset.id), t.value); touch(true); return; }
   if(cl.contains("inc-goal")&&holder){ state.income.find(x=>x.id===holder.dataset.id).goalId=t.value; touch(true); return; }
+  if(cl.contains("inc-cur")&&holder){ state.income.find(x=>x.id===holder.dataset.id).cur=t.value; touch(true); return; }
+  if(cl.contains("set-rate")){ state.settings.rubRate=Math.max(1,+t.value||100); touch(true); return; }
   if(cl.contains("task-range")){ const r=getRange(t.dataset.scope); r.mode=t.value; saveRange(t.dataset.scope); render(); return; }
   if(cl.contains("range-from")){ const r=getRange(t.dataset.scope); r.from=t.value; saveRange(t.dataset.scope); render(); return; }
   if(cl.contains("range-to")){ const r=getRange(t.dataset.scope); r.to=t.value; saveRange(t.dataset.scope); render(); return; }
@@ -1237,6 +1329,27 @@ document.addEventListener("click", e=>{
   const vb=e.target.closest("[data-view]");
   if(vb){ dirView[vb.dataset.scope]=vb.dataset.view; localStorage.setItem("u30_view_"+vb.dataset.scope, vb.dataset.view); render(); return; }
 
+  if(e.target.id==="themeBtn"){
+    const cur=localStorage.getItem("u30_theme")||"auto";
+    const next=cur==="auto"?"light":cur==="light"?"dark":"auto";
+    try{ localStorage.setItem("u30_theme",next); }catch(x){}
+    applyTheme(); return;
+  }
+  if(e.target.id==="csvBtn"){
+    const rows=[["Дата","Доход","Направление","Проект","Цель","Сумма","Валюта","Сумма $","Вероятность %","Статус"]];
+    for(const i of state.income){
+      rows.push([i.date||"", i.title, (dir(i.dirId)||{}).name||"",
+        i.projId&&proj(i.projId)?proj(i.projId).name:"", goalName(goalIdOf(i)),
+        i.amount, i.cur==="RUB"?"RUB":"USD", Math.round(amtOf(i)*100)/100, i.prob||0,
+        (INC_STATUSES.find(s=>s[0]===i.status)||["","?"])[1]]);
+    }
+    const csv="﻿"+rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(";")).join("\r\n");
+    const a=document.createElement("a");
+    a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
+    a.download="income-"+today()+".csv"; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),5000);
+    return;
+  }
   const ex=e.target.closest("[data-expand]");
   if(ex){ const gid=ex.dataset.expand; expandedGoal = expandedGoal===gid?null:gid; render();
     const box=document.querySelector('[data-exp-box="'+expandedGoal+'"]'); if(box) updExplore(box); return; }
@@ -1311,7 +1424,7 @@ document.addEventListener("submit", e=>{
   const fd=new FormData(f);
   if(f.id==="incForm"){
     const st=fd.get("status")||"idea";
-    const it={ id:uid(), title:fd.get("title"), amount:+fd.get("amount"), prob:st==="paid"?100:(+fd.get("prob")||0), status:st, date:fd.get("date")||(st==="paid"?today():""), dirId:"", projId:null, goalId:fd.get("goal")||"main" };
+    const it={ id:uid(), title:fd.get("title"), amount:+fd.get("amount"), cur:fd.get("cur")||"USD", prob:st==="paid"?100:(+fd.get("prob")||0), status:st, date:fd.get("date")||(st==="paid"?today():""), dirId:"", projId:null, goalId:fd.get("goal")||"main" };
     applyTarget(it, fd.get("target"));
     state.income.push(it);
   }
@@ -1468,6 +1581,7 @@ function loadSbLib(){
 function blankState(){
   const s=clone(DEFAULT_STATE);
   ["directions","projects","tasks","income","goals","expensesFixed","expensesAdhoc","debts","adjustments"].forEach(k=>s[k]=[]);
+  if(!s.settings) s.settings={ rubRate:100 };
   s.goal=null; /* у нового аккаунта цели нет — большой «+ Добавить цель» */
   s.updated=Date.now();
   return s;
@@ -1523,6 +1637,16 @@ document.addEventListener("click", async e=>{
   if(e.target.id==="logoutBtn"&&sb){ await sb.auth.signOut(); }
 });
 
+/* ================= theme ================= */
+function applyTheme(){
+  let t="auto"; try{ t=localStorage.getItem("u30_theme")||"auto"; }catch(e){}
+  const r=document.documentElement;
+  if(t==="auto") delete r.dataset.theme; else r.dataset.theme=t;
+  const b=document.getElementById("themeBtn");
+  if(b){ b.textContent = t==="light"?"☀️":t==="dark"?"🌙":"◐"; b.title="Тема: "+(t==="light"?"светлая":t==="dark"?"тёмная":"как в системе")+" (клик — переключить)"; }
+}
+applyTheme();
+
 /* ================= boot ================= */
 document.getElementById("savechip").addEventListener("click", async ()=>{
   if(!supaMode || artifactNS) return;
@@ -1532,7 +1656,8 @@ document.getElementById("savechip").addEventListener("click", async ()=>{
 });
 (async function(){
   if(!IS_SITE){
-    /* артефакт: личная версия владельца */
+    /* артефакт: личная версия владельца; темой управляет оболочка Claude */
+    const tb=document.getElementById("themeBtn"); if(tb) tb.style.display="none";
     await loadState();
     render();
     chip("local","Локально");
