@@ -296,22 +296,23 @@
   .seg button.on{background:var(--card); box-shadow:var(--shadow); font-weight:600; color:var(--ink)}
 
   /* ---------- landing ---------- */
-  .lnav{display:flex; justify-content:space-between; align-items:center; padding:20px 0; gap:16px; flex-wrap:wrap}
+  body.landing .main{padding:0; max-width:100%}
   .lwrap{max-width:1120px; margin:0 auto; padding:0 40px 80px}
-  .hero{display:grid; grid-template-columns:1fr 440px; gap:48px; align-items:center; padding:70px 0 90px}
-  @media(max-width:900px){.hero{grid-template-columns:1fr; padding:44px 0 60px}}
-  .kicker{font-size:12px; letter-spacing:.05em; text-transform:uppercase; color:var(--accent-deep); font-weight:600}
+  .lnav{display:flex; justify-content:space-between; align-items:center; padding:22px 0; gap:16px; flex-wrap:wrap}
+  .hero{display:grid; grid-template-columns:1fr 440px; gap:56px; align-items:center; padding:64px 0 96px; text-align:left}
   .hero h1{font-size:52px; line-height:1.06; font-weight:700; margin:14px 0 18px}
-  @media(max-width:900px){.hero h1{font-size:34px}}
   .hero p.lead{font-size:18px; color:var(--mut); max-width:460px; margin:0 0 26px}
-  .lsec{padding:0 0 110px}
-  .lsec h2{font-size:30px; font-weight:600; margin-bottom:26px; max-width:20ch}
-  .l3{display:grid; grid-template-columns:repeat(3,1fr); gap:12px}
-  @media(max-width:820px){.l3{grid-template-columns:1fr}}
+  .herobtns{display:flex; gap:10px; flex-wrap:wrap}
+  .demo-card{min-height:250px; opacity:1; transform:translateY(0)}
+  .lsec{padding:0 0 104px; text-align:center}
+  .lsec h2{font-size:30px; font-weight:600; margin:0 auto 10px; max-width:22ch}
+  .lsec .lsub{color:var(--mut); font-size:16px; margin:0 auto 30px; max-width:56ch}
+  .lcards{display:grid; grid-template-columns:repeat(3,1fr); gap:12px; text-align:left}
+  .lcards .card{margin:0}
+  .cardtext{margin:8px 0 0; font-size:13.5px; color:var(--mut); line-height:1.55}
+  .plans{display:grid; grid-template-columns:1fr 1fr; gap:12px; max-width:760px; margin:0 auto; text-align:left}
   .stepnum{font-family:"JetBrains Mono",monospace; color:var(--accent); font-size:13px; font-weight:700}
-  .plans{display:grid; grid-template-columns:1fr 1fr; gap:12px; max-width:760px}
-  @media(max-width:700px){.plans{grid-template-columns:1fr}}
-  .plan{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:24px; position:relative}
+  .plan{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:24px; position:relative; margin:0}
   .plan.pro{border-color:var(--accent)}
   .plan .price{font-size:32px; font-weight:700; font-family:"JetBrains Mono",monospace; margin:8px 0}
   .plan ul{list-style:none; padding:0; margin:16px 0; font-size:13.5px; color:var(--mut)}
@@ -319,6 +320,8 @@
   .badge{position:absolute; top:-10px; right:18px; background:var(--accent); color:#fff; font-size:10px; font-weight:700; letter-spacing:.05em; padding:4px 9px; border-radius:5px}
   .btn-lg{padding:13px 24px; font-size:15px; border-radius:8px}
   footer.lfoot{border-top:1px solid var(--line); padding:26px 0; display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; font-size:13px; color:var(--mut)}
+  @media(max-width:980px){ .hero{grid-template-columns:1fr; gap:32px; padding:44px 0 64px; text-align:center} .hero p.lead{margin-left:auto;margin-right:auto} .herobtns{justify-content:center} .hero h1{font-size:38px} .lcards{grid-template-columns:1fr} }
+  @media(max-width:700px){ .lwrap{padding:0 18px 60px} .plans{grid-template-columns:1fr} .lsec h2{font-size:24px} }
 
   /* ---------- mobile ---------- */
   .tabbar{display:none}
@@ -414,7 +417,7 @@ const SUPA = { url:"https://xhyoltlrpfsneerivmab.supabase.co", key:"sb_publishab
 let state=null, artifactNS=null, dirty=false, saveTimer=null, supaMode=false, supaKey=null;
 let sb=null, session=null, authMode=false;
 let selWeek=null, dirView={}, debtsHidden = localStorage.getItem("u30_eye")!=="show";
-const BUILD="2026.08.27-14";
+const BUILD="2026.08.27-15";
 try{
   if(localStorage.getItem("u30_build")!==BUILD){
     for(let i=localStorage.length-1;i>=0;i--){
@@ -658,6 +661,7 @@ function renderSidebar(r){
   const nav=document.getElementById("nav"), ftr=document.getElementById("sideftr");
   const side=document.getElementById("side"), tab=document.getElementById("tabbar");
   if(!nav) return;
+  document.body.classList.toggle("landing", !!(IS_SITE && !session));
   if(IS_SITE && !session){
     nav.innerHTML=""; if(ftr) ftr.innerHTML="";
     if(side) side.style.display="none"; if(tab) tab.style.display="none"; return;
@@ -687,10 +691,55 @@ function renderSidebar(r){
   if(side) side.classList.toggle("collapsed", localStorage.getItem("u30_side")==="1");
   applyTheme();
 }
+const DEMO_GOALS=[
+  { emo:"🚗", title:"Купить машину", amount:"2 000 000 ₽", fact:38, exp:54, max:63, tempo:"lag", need:"38 000 ₽", pace:"27 000 ₽", msg:"темп проседает — добери 11 000 ₽/нед" },
+  { emo:"💼", title:"Открыть своё дело", amount:"$8 000", fact:61, exp:79, max:88, tempo:"ok", need:"$310", pace:"$390", msg:"идёшь с запасом — так держать" },
+  { emo:"🇮🇹", title:"Съездить в Италию", amount:"15 000 €", fact:24, exp:41, max:52, tempo:"lag", need:"420 €", pace:"310 €", msg:"темп проседает — добери 110 €/нед" },
+  { emo:"🇺🇸", title:"Переехать в США", amount:"$24 000", fact:17, exp:29, max:44, tempo:"fail", need:"$640", pace:"$180", msg:"темп провален — нужен рывок" },
+  { emo:"🦴", title:"Вылечить спину", amount:"9 500 AED", fact:72, exp:86, max:100, tempo:"ok", need:"600 AED", pace:"720 AED", msg:"почти закрыто — осталось чуть-чуть" },
+  { emo:"🏡", title:"Первый взнос за квартиру", amount:"4 500 000 ₸", fact:45, exp:58, max:70, tempo:"lag", need:"95 000 ₸", pace:"71 000 ₸", msg:"темп проседает — добери 24 000 ₸/нед" },
+  { emo:"🎓", title:"Выучиться на новую профессию", amount:"£3 200", fact:56, exp:74, max:85, tempo:"ok", need:"£120", pace:"£140", msg:"идёшь с запасом — так держать" },
+  { emo:"📷", title:"Камера для съёмок", amount:"¥450 000", fact:31, exp:47, max:59, tempo:"lag", need:"¥18 000", pace:"¥13 000", msg:"темп проседает — добери ¥5 000/нед" }
+];
+let demoTimer=null, demoIdx=0;
+function demoCard(g){
+  const col=g.tempo==="ok"?"var(--green)":g.tempo==="lag"?"var(--yellow)":"var(--red)";
+  return '<div class="cap">Главная цель · дедлайн через 8 месяцев</div>'+
+    '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-top:8px;flex-wrap:wrap">'+
+      '<h2 style="font-size:18px">'+g.emo+' '+g.title+'</h2>'+
+      '<span class="num" style="font-size:20px;font-weight:700;color:var(--accent-deep);white-space:nowrap">'+g.amount+'</span></div>'+
+    '<div class="cbar"><div class="trk"></div><div class="exp" style="width:'+g.exp+'%"></div>'+
+      '<div class="fct" style="width:'+g.fact+'%"></div><div class="ntc" style="left:'+g.max+'%"><span>МАКС</span></div></div>'+
+    '<div class="barlegend"><span class="l1"><i></i>факт</span><span class="l2"><i></i>ожидаемо</span><span class="l3"><i></i>максимум</span></div>'+
+    '<div style="border-top:1px solid var(--line);margin-top:14px;padding-top:14px">'+
+      '<div class="tl '+g.tempo+'"><span class="dot"></span><span>нужно <b class="num">'+g.need+'</b>/нед — твой темп <b class="num">'+g.pace+'</b></span></div>'+
+      '<div class="tlmsg" style="color:'+col+'">'+g.msg+'</div></div>';
+}
+function startDemoRotation(){
+  stopDemoRotation();
+  const host=document.getElementById("demoGoal");
+  if(!host) return;
+  host.innerHTML=demoCard(DEMO_GOALS[demoIdx]);
+  const reduced=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  demoTimer=setInterval(function(){
+    const h=document.getElementById("demoGoal");
+    if(!h){ stopDemoRotation(); return; }
+    demoIdx=(demoIdx+1)%DEMO_GOALS.length;
+    if(reduced){ h.innerHTML=demoCard(DEMO_GOALS[demoIdx]); return; }
+    h.style.transition="opacity .35s ease, transform .35s ease";
+    h.style.opacity="0"; h.style.transform="translateY(-8px)";
+    setTimeout(function(){
+      h.innerHTML=demoCard(DEMO_GOALS[demoIdx]);
+      h.style.transform="translateY(8px)";
+      requestAnimationFrame(function(){ h.style.opacity="1"; h.style.transform="translateY(0)"; });
+    },350);
+  },3000);
+}
+function stopDemoRotation(){ if(demoTimer){ clearInterval(demoTimer); demoTimer=null; } }
 function renderLanding(){
   const side=document.getElementById("side"); if(side) side.style.display="none";
   const tab=document.getElementById("tabbar"); if(tab) tab.style.display="none";
-  const D="$";
+  const hdr=document.getElementById("hdr"); if(hdr) hdr.innerHTML="";
   document.getElementById("app").innerHTML=`
   <div class="lwrap">
     <div class="lnav">
@@ -700,80 +749,86 @@ function renderLanding(){
         <button class="primary" id="googleBtn">Начать бесплатно</button>
       </span>
     </div>
+
     <div class="hero">
       <div>
         <div class="kicker">трекер личных целей</div>
         <h1>Одна цель.<br>Честный темп.</h1>
-        <p class="lead">Поставьте сумму и дату — сервис посчитает недельную норму и честно скажет, успеваете вы или нет.</p>
-        <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <p class="lead">Поставьте сумму и дату — сервис посчитает, сколько нужно зарабатывать в неделю, и честно скажет, успеваете вы или нет.</p>
+        <div class="herobtns">
           <button class="primary btn-lg" id="googleBtn2">Создать первую цель</button>
           <button class="ghost btn-lg" id="emailBtn">Войти по почте</button>
         </div>
         <p class="muted" style="font-size:13px;margin-top:14px">Бесплатно для одной цели · без карты · вход через Google</p>
       </div>
-      <div class="card" style="margin:0">
-        <div class="cap">Главная цель · дедлайн март 2027</div>
-        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-top:8px;flex-wrap:wrap">
-          <h2 style="font-size:18px">🌎 Переезд в Уругвай</h2>
-          <span class="num" style="font-size:24px;font-weight:700;color:var(--accent-deep)">${D}12 400</span>
-        </div>
-        <div class="cbar"><div class="trk"></div><div class="exp" style="width:57%"></div><div class="fct" style="width:41%"></div><div class="ntc" style="left:66%"><span>МАКС</span></div></div>
-        <div class="barlegend"><span class="l1"><i></i>факт</span><span class="l2"><i></i>ожидаемо</span><span class="l3"><i></i>максимум</span></div>
-        <div style="border-top:1px solid var(--line);margin-top:14px;padding-top:14px">
-          <div class="tl lag"><span class="dot"></span><span>нужно <b class="num">${D}560</b>/нед — твой темп <b class="num">${D}430</b></span></div>
-          <div class="tlmsg" style="color:var(--yellow)">темп проседает — добери ${D}130/нед</div>
-        </div>
-      </div>
+      <div class="card demo-card" id="demoGoal" style="margin:0"></div>
     </div>
+
     <div class="lsec">
-      <h2>Цель проваливают не из-за лени, а из-за отсутствия обратной связи</h2>
-      <div class="l3">
-        <div class="card"><h3>📉 Баланс — не прогресс</h3><p class="muted" style="margin:8px 0 0;font-size:13.5px">Банковское приложение показывает остаток. Оно не знает, к чему вы идёте и успеваете ли.</p></div>
-        <div class="card"><h3>🌀 План живёт в голове</h3><p class="muted" style="margin:8px 0 0;font-size:13.5px">Цели, задачи и деньги разложены по пяти инструментам, которые не связаны между собой.</p></div>
-        <div class="card"><h3>🤷 Непонятно, что делать сегодня</h3><p class="muted" style="margin:8px 0 0;font-size:13.5px">Между «хочу переехать» и «сесть за работу» нет моста. Сервис его строит.</p></div>
+      <h2>Дело не в лени. Просто никто не говорит вам, успеваете вы или нет</h2>
+      <p class="lsub">Деньги есть, планы есть, а понимания — нет. Вот три причины, по которым цели срываются.</p>
+      <div class="lcards">
+        <div class="card"><h3>💳 Банк показывает остаток, а не путь</h3><p class="cardtext">Вы видите, сколько денег сейчас. Но не видите, хватит ли их к нужной дате и сколько осталось собрать.</p></div>
+        <div class="card"><h3>🧩 Всё разбросано</h3><p class="cardtext">Цель — в голове, деньги — в заметках, задачи — в мессенджере. Собрать картину целиком не получается никогда.</p></div>
+        <div class="card"><h3>🤔 Непонятно, за что браться сегодня</h3><p class="cardtext">Дел много, а какие из них реально приближают к цели — неясно. В итоге делается срочное, а не важное.</p></div>
       </div>
     </div>
+
     <div class="lsec">
       <h2>Как это работает</h2>
-      <div class="l3">
-        <div class="card"><div class="stepnum">01</div><h3 style="margin:8px 0">Сумма и дата</h3><p class="muted" style="margin:0;font-size:13.5px">Цель — это вещь: переезд, машина, лечение. Разбейте её на этапы со своими суммами.</p></div>
-        <div class="card"><div class="stepnum">02</div><h3 style="margin:8px 0">Источники и задачи</h3><p class="muted" style="margin:0;font-size:13.5px">Направления дохода, сделки с вероятностью и задачи в списке, канбане или Ганте.</p></div>
-        <div class="card"><div class="stepnum">03</div><h3 style="margin:8px 0">Светофор темпа</h3><p class="muted" style="margin:0;font-size:13.5px">Зелёный — идёте с запасом. Жёлтый — добрать столько-то. Красный — нужен рывок.</p></div>
+      <p class="lsub">Три шага — и вы всегда знаете, где находитесь.</p>
+      <div class="lcards">
+        <div class="card"><div class="stepnum">01</div><h3 style="margin:8px 0">Вы ставите цель</h3><p class="cardtext">Машина, переезд, лечение, отпуск. Сумма, дата — и, если нужно, этапы поменьше.</p></div>
+        <div class="card"><div class="stepnum">02</div><h3 style="margin:8px 0">Пишете доходы и задачи</h3><p class="cardtext">Откуда приходят деньги, что уже получено, что ещё в работе — и какие дела за этим стоят.</p></div>
+        <div class="card"><div class="stepnum">03</div><h3 style="margin:8px 0">Система подсказывает, что делать</h3><p class="cardtext">Светофор показывает темп, а список «сфокусируйся сегодня» — три задачи, которые двигают цель сильнее всего.</p></div>
       </div>
     </div>
+
     <div class="lsec">
       <h2>Деньги, задачи и недели — в одном месте</h2>
-      <div class="l3">
-        <div class="card"><h3>Прогноз, а не отчёт</h3><p class="muted" style="margin:8px 0 0;font-size:13.5px">Сделки со статусами и вероятностью: видно не только сколько заработано, но и сколько, скорее всего, придёт.</p></div>
-        <div class="card"><h3>Задачи в трёх видах</h3><p class="muted" style="margin:8px 0 0;font-size:13.5px">Один список — список, канбан с перетаскиванием и диаграмма Ганта. Правка в одном виде меняет все.</p></div>
-        <div class="card"><h3>Никаких банков</h3><p class="muted" style="margin:8px 0 0;font-size:13.5px">Мы не просим доступ к вашему банку. Ручной ввод крупными мазками — и ничего не ломается.</p></div>
+      <p class="lsub">Ровно столько учёта, сколько нужно для цели. Без бухгалтерии.</p>
+      <div class="lcards">
+        <div class="card"><h3>Прогноз, а не отчёт</h3><p class="cardtext">У каждой сделки — вероятность. Видно не только заработанное, но и то, что, скорее всего, придёт.</p></div>
+        <div class="card"><h3>Задачи в трёх видах</h3><p class="cardtext">Один список — список, канбан и диаграмма Ганта. Правите в одном месте, меняется везде.</p></div>
+        <div class="card"><h3>Никаких банков</h3><p class="cardtext">Мы не просим доступ к вашему счёту. Вы вносите крупные суммы руками — и ничего не ломается.</p></div>
       </div>
     </div>
+
     <div class="lsec">
       <h2>Тарифы</h2>
+      <p class="lsub">Начните бесплатно. Платите, когда почувствуете пользу.</p>
       <div class="plans">
         <div class="plan">
-          <div class="cap">Старт</div><div class="price">${D}0</div>
+          <div class="cap">Старт</div><div class="price">$0</div>
           <div class="muted" style="font-size:13px">навсегда</div>
-          <ul><li>Одна главная цель с этапами</li><li>Направления и проекты</li><li>Задачи: список, канбан, Гант</li></ul>
+          <ul><li>Одна цель с этапами</li><li>Направления и проекты</li><li>Задачи: список, канбан, Гант</li></ul>
           <button class="ghost" id="emailBtn2" style="width:100%">Создать цель</button>
         </div>
         <div class="plan pro">
           <span class="badge">ПОПУЛЯРНЫЙ</span>
-          <div class="cap">PRO</div><div class="price">${D}5</div>
-          <div class="muted" style="font-size:13px">в месяц · ${D}49 в год</div>
-          <ul><li>Вероятности и прогноз пайплайна</li><li>Несколько целей и долги</li><li>Светофор темпа и недели</li><li>Экспорт и сообщество</li></ul>
+          <div class="cap">PRO</div><div class="price">$5</div>
+          <div class="muted" style="font-size:13px">в месяц · $49 в год</div>
+          <ul><li>Вероятности и прогноз дохода</li><li>Несколько целей и долги</li><li>Светофор темпа и недели</li><li>Экспорт и доступ в сообщество</li></ul>
           <button class="primary" id="googleBtn3" style="width:100%">Начать бесплатно</button>
         </div>
       </div>
-      <p class="muted" style="font-size:13px;margin-top:12px">Lifetime ${D}79 — первым 200 пользователям.</p>
+      <p class="muted" style="font-size:13px;margin-top:14px">Lifetime $79 — первым 200 пользователям.</p>
     </div>
+
+    <div class="lsec" style="padding-bottom:60px">
+      <h2 style="font-size:34px">Поставьте дату. Остальное посчитаем.</h2>
+      <div class="herobtns" style="justify-content:center">
+        <button class="primary btn-lg" id="googleBtn4">Создать первую цель</button>
+      </div>
+    </div>
+
     <footer class="lfoot">
       <div class="wordmark" style="padding:0;font-size:15px">ЦЕЛЬ<i>›</i></div>
-      <span>Поставьте дату. Остальное посчитаем.</span>
+      <span>Личный трекер целей · ваши данные видны только вам</span>
     </footer>
   </div>`;
   applyTheme();
+  startDemoRotation();
 }
 
 function render(){
@@ -781,6 +836,7 @@ function render(){
   renderHeader(r);
   renderSidebar(r);
   if(IS_SITE && !session){ renderLanding(); return; }
+  stopDemoRotation();
   const app=document.getElementById("app");
   const draw=function(fn){ try{ return fn(); }catch(err){ console.error(err); return '<section class="panel"><h2>Не удалось отрисовать раздел</h2><p class="muted">'+esc(String(err&&err.message||err))+'</p><p class="muted" style="font-size:12.5px">Обнови страницу (Ctrl+F5). Если повторится — сообщи мне текст ошибки.</p></section>'; } };
   if (r.p==="goal") app.innerHTML=draw(function(){return vGoalPage(r.id);});
@@ -2044,10 +2100,10 @@ async function onAuthChanged(){
   }
 }
 document.addEventListener("click", async e=>{
-  if((e.target.id==="googleBtn"||e.target.id==="googleBtn2")&&sb){
+  if((e.target.id==="googleBtn"||e.target.id==="googleBtn2"||e.target.id==="googleBtn3"||e.target.id==="googleBtn4")&&sb){
     await sb.auth.signInWithOAuth({ provider:"google", options:{ redirectTo: location.origin+location.pathname } });
   }
-  if(e.target.id==="emailBtn"&&sb){
+  if((e.target.id==="emailBtn"||e.target.id==="emailBtn2")&&sb){
     const email=prompt("Твоя почта — пришлём ссылку для входа:");
     if(!email) return;
     const {error}=await sb.auth.signInWithOtp({ email, options:{ emailRedirectTo: location.origin+location.pathname } });
