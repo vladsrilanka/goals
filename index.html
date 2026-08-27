@@ -46,7 +46,10 @@
   a{color:var(--accent); text-decoration:none}
   a:hover{text-decoration:underline}
   .num{font-family:"JetBrains Mono",monospace; font-variant-numeric:tabular-nums}
-  nav.main{display:flex; gap:6px; margin:14px 0 18px; flex-wrap:wrap}
+  nav.main{display:flex; gap:6px; margin:14px 0 18px; flex-wrap:wrap; position:sticky; top:0; z-index:30; background:var(--bg); padding:10px 0}
+  a.tile{display:block; color:inherit; text-decoration:none}
+  a.tile:hover{border-color:var(--accent); text-decoration:none}
+  @media (prefers-reduced-motion: reduce){ *{transition:none!important; animation:none!important} }
   nav.main a{padding:7px 16px; border-radius:99px; background:var(--panel); border:1px solid var(--line); color:var(--ink2); font-weight:500}
   nav.main a.on{background:var(--accent); color:var(--accent-ink); border-color:var(--accent)}
   nav.main a:hover{text-decoration:none}
@@ -479,6 +482,8 @@ function route(){
   const h=location.hash;
   if (h.startsWith("#/dir/")) return {p:"dir", id:h.slice(6)};
   if (h.startsWith("#/weeks")) return {p:"weeks"};
+  if (h.startsWith("#/money")) return {p:"money"};
+  if (h.startsWith("#/tasks")) return {p:"tasks"};
   if (h.startsWith("#/g/")) return {p:"goal", id:h.slice(4)};
   if (h.startsWith("#/goal")) return {p:"goaledit"};
   return {p:"main"};
@@ -526,10 +531,15 @@ function render(){
   const r=route();
   document.getElementById("nav").innerHTML =
     '<a href="#/" class="'+(r.p==="main"?"on":"")+'">Главная</a>'+
+    '<a href="#/money" class="'+(r.p==="money"?"on":"")+'">Деньги</a>'+
+    '<a href="#/tasks" class="'+(r.p==="tasks"?"on":"")+'">Задачи</a>'+
     '<a href="#/weeks" class="'+(r.p==="weeks"?"on":"")+'">Недели</a>'+
-    (r.p==="dir"?'<a href="#/dir/'+r.id+'" class="on">'+esc((dir(r.id)||{}).name||"—")+'</a>':'');
+    (r.p==="dir"?'<a href="#/dir/'+r.id+'" class="on">'+esc((dir(r.id)||{}).name||"—")+'</a>':'')+
+    (r.p==="goal"?'<a href="'+location.hash+'" class="on">Цель</a>':'');
   const app=document.getElementById("app");
   if (r.p==="goal") app.innerHTML=vGoalPage(r.id);
+  else if (r.p==="money") app.innerHTML=vMoney();
+  else if (r.p==="tasks") app.innerHTML=vTasksPage();
   else if (r.p==="goaledit") app.innerHTML=vGoalEdit();
   else if (r.p==="weeks") app.innerHTML = state.goal?vWeeks():'<section class="panel"><p class="muted">Сначала <a href="#/goal">создай главную цель</a> — недели считаются от её старта до дедлайна.</p></section>';
   else if (r.p==="dir"){ const d=dir(r.id); app.innerHTML = d?vDir(d):'<p class="muted">Направление не найдено. <a href="#/">На главную</a></p>'; }
@@ -626,6 +636,67 @@ function vGoalArea(){
   }
   return out;
 }
+function vMoney(){
+  return `
+  <section class="panel">
+    <div class="phead"><h2>Пайплайн доходов</h2>
+      ${state.goals.length?'<div class="viewtog" style="flex-wrap:wrap">'+
+        [["all","Все цели"],["main","Уругвай"],...state.goals.map(g=>[g.id,g.name])]
+          .map(([v,l])=>'<button class="pf'+(pipeFilter===v?" on":"")+'" data-pf="'+v+'">'+esc(l)+'</button>').join("")+'</div>':''}
+    </div>
+    <div class="tscroll"><table id="incTable">${tblIncome()}</table></div>
+    <form class="addrow" id="incForm">
+      <input name="title" placeholder="Что за доход (клиент, сделка…)" required>
+      ${targetSel("","","").replace('class="slim "','class="slim" name="target"')}
+      ${state.goals.length?goalSel("",pipeFilter!=="all"?pipeFilter:"main").replace('class="slim "','class="slim" name="goal" title="Цель"'):""}
+      <input name="amount" class="amt" type="number" min="0" step="1" placeholder="$" required>
+      <input name="prob" class="prob" type="number" min="0" max="100" step="5" value="50" title="Вероятность, %">
+      <select name="status" class="slim">${INC_STATUSES.filter(s=>s[0]!=="lost").map(([v,l])=>'<option value="'+v+'"'+(v==="paid"?" selected":"")+'>'+l+'</option>').join("")}</select>
+      <input name="date" type="date">
+      <button class="primary" type="submit">Добавить</button>
+    </form>
+    <p class="muted" style="font-size:13px; margin:10px 0 0">В цель и прогресс-бар попадают только доходы со статусом «получено». Остальные (идея → переговоры → счёт) видны как «Прогноз из пайплайна»: сумма × вероятность. Пример: сделка на $1 000 с вероятностью 50% даёт $500 прогноза.</p>
+  </section>
+
+  <section class="panel">
+    <h2>Обязательные расходы (в месяц)</h2>
+    <div class="tscroll"><table id="expTable">${tblFixed()}</table></div>
+    <form class="addrow" id="expForm">
+      <input name="title" placeholder="Название расхода" required>
+      <input name="amount" class="amt" type="number" min="0" step="1" placeholder="$/мес" required>
+      <button class="primary" type="submit">Добавить</button>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>Просто расходы</h2>
+    <div class="tscroll"><table id="adhocTable">${tblAdhoc()}</table></div>
+    <form class="addrow" id="adhocForm">
+      <input name="date" type="date" value="${today()}">
+      <input name="title" placeholder="На что потратил" required>
+      <input name="amount" class="amt" type="number" min="0" step="1" placeholder="$" required>
+      <input name="comment" placeholder="Комментарий (необязательно)">
+      <button class="primary" type="submit">Добавить</button>
+    </form>
+  </section>
+
+  <section class="panel ${debtsHidden?"veil":""}" id="debtsPanel">
+    <div class="phead"><h2>Долги</h2>
+      <button class="ghost eyebtn" id="eyeBtn" title="Приватность">${debtsHidden?"🙈 скрыто":"👁 видно"}</button></div>
+    ${vDebts()}
+    <form class="addrow" id="debtForm">
+      <input name="title" placeholder="Название долга" required>
+      <select name="type" class="slim"><option value="lump">разовый (сумма к погашению)</option><option value="bank">банковский (ежемесячный платёж)</option></select>
+      <input name="amount" class="amt" type="number" min="0" step="1" placeholder="$" required>
+      <input name="due" type="date" title="Погасить до (необязательно)">
+      <button class="primary" type="submit">Добавить</button>
+    </form>
+  </section>
+
+`;
+}
+function vTasksPage(){ return vTasksSection(null); }
+
 /* ---------- goal page ---------- */
 function vGoalPage(gid){
   const isMain=gid==="main";
@@ -750,70 +821,15 @@ function vMain(){
   const fx=fixedMonthly(), adhocMo=adhocIn(ma,mb);
   const mName=MONTHS_R[new Date().getMonth()];
 
-  const tile=(lbl,val,hint,frac,cls)=>'<div class="tile '+cls+'"><div class="lbl">'+lbl+'</div><div class="val num">'+val+'</div><div class="hint">'+hint+'</div><div class="minibar"><i style="width:'+Math.min(100,frac*100)+'%"></i></div></div>';
+  const tile=(lbl,val,hint,frac,cls,href)=>'<a class="tile '+cls+'" href="'+(href||"#/")+'"><div class="lbl">'+lbl+'</div><div class="val num">'+val+'</div><div class="hint">'+hint+'</div><div class="minibar"><i style="width:'+Math.min(100,frac*100)+'%"></i></div></a>';
 
   return `
   ${vGoalArea()}
   <section class="tiles">
-    ${tile("Эта неделя · "+fmtD(wa)+"–"+fmtD(addD(wb,-1)), fmt(wk), wmin?"минимум "+fmt(wmin):"доход за неделю", wmin?wk/wmin:(wk?1:0), wmin?(wk>=wmin?"good":"bad"):"")}
-    ${tile("Этот месяц · "+mName, fmt(mo), "минимум "+fmt(fx)+" (обяз. расходы)", mo/Math.max(1,fx), mo>=fx?"good":"")}
-    ${tile("Прогноз из пайплайна", fmt(wgtAll), "открытые сделки × их вероятность (все цели)", Math.min(1,wgtAll/Math.max(1,tgt-paid)), "")}
-    ${tile("Расходы · "+mName, fmt(fx+adhocMo), "обязательные "+fmt(fx)+" + разовые "+fmt(adhocMo), 1, "")}
-  </section>
-
-  <section class="panel">
-    <div class="phead"><h2>Пайплайн доходов</h2>
-      ${state.goals.length?'<div class="viewtog" style="flex-wrap:wrap">'+
-        [["all","Все цели"],["main","Уругвай"],...state.goals.map(g=>[g.id,g.name])]
-          .map(([v,l])=>'<button class="pf'+(pipeFilter===v?" on":"")+'" data-pf="'+v+'">'+esc(l)+'</button>').join("")+'</div>':''}
-    </div>
-    <div class="tscroll"><table id="incTable">${tblIncome()}</table></div>
-    <form class="addrow" id="incForm">
-      <input name="title" placeholder="Что за доход (клиент, сделка…)" required>
-      ${targetSel("","","").replace('class="slim "','class="slim" name="target"')}
-      ${state.goals.length?goalSel("",pipeFilter!=="all"?pipeFilter:"main").replace('class="slim "','class="slim" name="goal" title="Цель"'):""}
-      <input name="amount" class="amt" type="number" min="0" step="1" placeholder="$" required>
-      <input name="prob" class="prob" type="number" min="0" max="100" step="5" value="50" title="Вероятность, %">
-      <select name="status" class="slim">${INC_STATUSES.filter(s=>s[0]!=="lost").map(([v,l])=>'<option value="'+v+'"'+(v==="paid"?" selected":"")+'>'+l+'</option>').join("")}</select>
-      <input name="date" type="date">
-      <button class="primary" type="submit">Добавить</button>
-    </form>
-    <p class="muted" style="font-size:13px; margin:10px 0 0">В цель и прогресс-бар попадают только доходы со статусом «получено». Остальные (идея → переговоры → счёт) видны как «Прогноз из пайплайна»: сумма × вероятность. Пример: сделка на $1 000 с вероятностью 50% даёт $500 прогноза.</p>
-  </section>
-
-  <section class="panel">
-    <h2>Обязательные расходы (в месяц)</h2>
-    <div class="tscroll"><table id="expTable">${tblFixed()}</table></div>
-    <form class="addrow" id="expForm">
-      <input name="title" placeholder="Название расхода" required>
-      <input name="amount" class="amt" type="number" min="0" step="1" placeholder="$/мес" required>
-      <button class="primary" type="submit">Добавить</button>
-    </form>
-  </section>
-
-  <section class="panel">
-    <h2>Просто расходы</h2>
-    <div class="tscroll"><table id="adhocTable">${tblAdhoc()}</table></div>
-    <form class="addrow" id="adhocForm">
-      <input name="date" type="date" value="${today()}">
-      <input name="title" placeholder="На что потратил" required>
-      <input name="amount" class="amt" type="number" min="0" step="1" placeholder="$" required>
-      <input name="comment" placeholder="Комментарий (необязательно)">
-      <button class="primary" type="submit">Добавить</button>
-    </form>
-  </section>
-
-  <section class="panel ${debtsHidden?"veil":""}" id="debtsPanel">
-    <div class="phead"><h2>Долги</h2>
-      <button class="ghost eyebtn" id="eyeBtn" title="Приватность">${debtsHidden?"🙈 скрыто":"👁 видно"}</button></div>
-    ${vDebts()}
-    <form class="addrow" id="debtForm">
-      <input name="title" placeholder="Название долга" required>
-      <select name="type" class="slim"><option value="lump">разовый (сумма к погашению)</option><option value="bank">банковский (ежемесячный платёж)</option></select>
-      <input name="amount" class="amt" type="number" min="0" step="1" placeholder="$" required>
-      <input name="due" type="date" title="Погасить до (необязательно)">
-      <button class="primary" type="submit">Добавить</button>
-    </form>
+    ${tile("Эта неделя · "+fmtD(wa)+"–"+fmtD(addD(wb,-1)), fmt(wk), wmin?"минимум "+fmt(wmin):"доход за неделю", wmin?wk/wmin:(wk?1:0), wmin?(wk>=wmin?"good":"bad"):"", "#/weeks")}
+    ${tile("Этот месяц · "+mName, fmt(mo), "минимум "+fmt(fx)+" (обяз. расходы)", mo/Math.max(1,fx), mo>=fx?"good":"", "#/money")}
+    ${tile("Прогноз из пайплайна", fmt(wgtAll), "открытые сделки × их вероятность (все цели)", Math.min(1,wgtAll/Math.max(1,tgt-paid)), "", "#/money")}
+    ${tile("Расходы · "+mName, fmt(fx+adhocMo), "обязательные "+fmt(fx)+" + разовые "+fmt(adhocMo), 1, "", "#/money")}
   </section>
 
   <section class="panel">
@@ -823,8 +839,7 @@ function vMain(){
       <input name="title" placeholder="Новое направление" required>
       <button class="primary" type="submit">Добавить направление</button>
     </form>
-  </section>
-  ${vTasksSection(null)}`;
+  </section>`;
 }
 function cardDir(d){
   const [wa,wb]=curWeek(), [ma,mb]=curMonth();
@@ -1265,6 +1280,14 @@ document.addEventListener("click", e=>{
   if(del){
     const listName=del.dataset.del, id=del.closest("[data-id]").dataset.id;
     if(listName==="directions"){ return; }
+    if(listName==="income"){
+      const it=state.income.find(x=>x.id===id);
+      if(it && +it.amount>0 && !confirm('Удалить доход «'+it.title+'» ('+fmt(it.amount)+')?')) return;
+    }
+    if(listName==="debts"){
+      const it=state.debts.find(x=>x.id===id);
+      if(it && !confirm('Удалить долг «'+it.title+'» вместе с историей платежей?')) return;
+    }
     state[listName]=state[listName].filter(x=>x.id!==id);
     if(listName==="projects"){ state.tasks=state.tasks.filter(t=>t.projId!==id); state.income.forEach(i=>{ if(i.projId===id) i.projId=null; }); }
     if(listName==="goals"){ state.income.forEach(i=>{ if(i.goalId===id) i.goalId="main"; }); if(pipeFilter===id) pipeFilter="all"; }
