@@ -1344,9 +1344,16 @@ document.addEventListener("click", e=>{
         (INC_STATUSES.find(s=>s[0]===i.status)||["","?"])[1]]);
     }
     const csv="﻿"+rows.map(r=>r.map(c=>'"'+String(c).replace(/"/g,'""')+'"').join(";")).join("\r\n");
+    const fname="income-"+today()+".csv";
+    if(!IS_SITE && window.claude){
+      window.claude.use("downloads").then(dl=>{
+        if(dl) dl.save({filename:fname, data:csv}).catch(()=>{});
+      });
+      return;
+    }
     const a=document.createElement("a");
     a.href=URL.createObjectURL(new Blob([csv],{type:"text/csv;charset=utf-8"}));
-    a.download="income-"+today()+".csv"; document.body.appendChild(a); a.click(); a.remove();
+    a.download=fname; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(()=>URL.revokeObjectURL(a.href),5000);
     return;
   }
