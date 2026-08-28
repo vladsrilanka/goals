@@ -421,7 +421,7 @@ const SUPA = { url:"https://xhyoltlrpfsneerivmab.supabase.co", key:"sb_publishab
 let state=null, artifactNS=null, dirty=false, saveTimer=null, supaMode=false, supaKey=null;
 let sb=null, session=null, authMode=false;
 let selWeek=null, dirView={}, debtsHidden = localStorage.getItem("u30_eye")!=="show";
-const BUILD="2026.08.27-18";
+const BUILD="2026.08.28-19";
 try{
   if(localStorage.getItem("u30_build")!==BUILD){
     for(let i=localStorage.length-1;i>=0;i--){
@@ -1125,7 +1125,7 @@ function vGoalEdit(){
     </tbody></table></div>
     <form class="addrow" id="subForm">
       <input name="title" placeholder="Название этапа" required>
-      <input name="amount" class="amt" type="number" min="1" placeholder="$" value="${subPrefill()}" required>
+      <input name="amount" class="amt num" type="number" min="1" placeholder="${subPrefill()||"$"}" title="Если оставить пустым — подставится остаток до цели">
       <button class="primary" type="submit">Добавить этап</button>
     </form>
     ${subsBalanceHtml()}
@@ -1912,7 +1912,13 @@ document.addEventListener("submit", e=>{
   }
   else if(f.id==="adjForm") state.adjustments.push({ id:uid(), date:fd.get("date")||today(), balance:+fd.get("balance"), comment:fd.get("comment")||"" });
   else if(f.id==="goalForm") state.goals.push({ id:uid(), name:fd.get("title"), target:+fd.get("amount"), deadline:fd.get("due")||"", emoji:suggestEmoji(fd.get("title")) });
-  else if(f.id==="subForm"){ if(!state.goal.subs) state.goal.subs=[]; state.goal.subs.push({ id:uid(), label:fd.get("title"), amount:+fd.get("amount") }); }
+  else if(f.id==="subForm"){
+    if(!state.goal.subs) state.goal.subs=[];
+    let amt=+fd.get("amount");
+    if(!amt) amt=Math.max(0,(+state.goal.target||0)-subsSum()); /* пусто — подставляем остаток */
+    if(!amt){ chip("dirty","Укажи сумму этапа — остаток уже распределён"); return; }
+    state.goal.subs.push({ id:uid(), label:fd.get("title"), amount:amt });
+  }
   else if(f.classList.contains("payForm")){
     const debt=state.debts.find(x=>x.id===f.dataset.debt);
     debt.payments.push({ id:uid(), date:fd.get("date")||today(), amount:+fd.get("amount"), comment:fd.get("comment")||"" });
