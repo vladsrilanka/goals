@@ -421,7 +421,7 @@ const SUPA = { url:"https://xhyoltlrpfsneerivmab.supabase.co", key:"sb_publishab
 let state=null, artifactNS=null, dirty=false, saveTimer=null, supaMode=false, supaKey=null;
 let sb=null, session=null, authMode=false;
 let selWeek=null, dirView={}, debtsHidden = localStorage.getItem("u30_eye")!=="show";
-const BUILD="2026.08.28-19";
+const BUILD="2026.08.28-20";
 try{
   if(localStorage.getItem("u30_build")!==BUILD){
     for(let i=localStorage.length-1;i>=0;i--){
@@ -1166,6 +1166,15 @@ function vGoalEdit(){
     </div>
     <p class="muted" style="font-size:12px;margin:8px 0 0">Сброс удаляет цели, доходы, задачи и настройки этого аккаунта и запускает обучение заново. Другие аккаунты не затрагиваются.</p>
   </section>
+  <section class="panel"><h2>Резервная копия</h2>
+    <p class="muted" style="margin:0 0 10px;font-size:13px">Скачай файл — это полная копия аккаунта: цели, доходы, расходы, долги, задачи и настройки. Загрузить можно в любой момент и на любом устройстве.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="ghost" id="backupSave">⬇ Скачать бэкап</button>
+      <button class="primary" id="backupLoad">⬆ Загрузить из файла</button>
+      <input type="file" id="backupFile" accept="application/json,.json" style="display:none">
+    </div>
+    <p class="muted" style="font-size:12px;margin:8px 0 0">Загрузка заменит текущие данные аккаунта. Перед заменой копия текущего состояния скачается автоматически.</p>
+  </section>
   <section class="panel"><h2>Обучение</h2>
     <p class="muted" style="margin:0 0 10px;font-size:13px">Интерактивная экскурсия: цель, этапы, пайплайн, задачи. 10 коротких шагов.</p>
     <button class="ghost" id="tourRestart">Пройти обучение заново</button>
@@ -1770,6 +1779,8 @@ document.addEventListener("click", e=>{
     return;
   }
   if(e.target.id==="logoutBtn2"&&sb){ sb.auth.signOut(); return; }
+  if(e.target.id==="backupSave"){ downloadBackup(); return; }
+  if(e.target.id==="backupLoad"){ const bf=document.getElementById("backupFile"); if(bf) bf.click(); return; }
   if(e.target.id==="wipeAccount"){
     if(!confirm("Точно стереть ВСЕ данные этого аккаунта? Цели, доходы, задачи, долги — всё будет удалено безвозвратно.")) return;
     state=blankState();
@@ -2268,6 +2279,48 @@ function positionTour(){
 }
 window.addEventListener("resize", function(){ if(tourStep>=0) positionTour(); });
 window.addEventListener("scroll", function(){ if(tourStep>=0) positionTour(); }, true);
+
+function downloadBackup(silent){
+  const json=JSON.stringify(state,null,2);
+  const name="cel-backup-"+today()+".json";
+  if(!IS_SITE && window.claude){
+    window.claude.use("downloads").then(function(dl){ if(dl) dl.save({filename:name,data:json}).catch(function(){}); });
+    return;
+  }
+  const a=document.createElement("a");
+  a.href=URL.createObjectURL(new Blob([json],{type:"application/json"}));
+  a.download=name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); },5000);
+  if(!silent) chip("","Бэкап скачан");
+}
+function applyBackup(data){
+  const migrated=migrate(data);
+  if(!migrated||typeof migrated!=="object"||!Array.isArray(migrated.tasks)) return false;
+  downloadBackup(true);
+  state=migrated;
+  state.updated=Date.now();
+  dirty=true;
+  location.hash="#/";
+  render();
+  cloudSave();
+  chip("","Бэкап загружен");
+  return true;
+}
+document.addEventListener("change", function(e){
+  if(e.target.id!=="backupFile") return;
+  const file=e.target.files&&e.target.files[0];
+  if(!file) return;
+  const rd=new FileReader();
+  rd.onload=function(){
+    let data=null;
+    try{ data=JSON.parse(String(rd.result)); }catch(err){ alert("Не удалось прочитать файл: это не JSON-бэкап."); return; }
+    const dirs=(data.directions||[]).length, tsk=(data.tasks||[]).length, inc=(data.income||[]).length;
+    if(!confirm("Загрузить бэкап? Текущие данные аккаунта будут заменены.\n\nВ файле: "+dirs+" направлений, "+tsk+" задач, "+inc+" записей дохода")) return;
+    if(!applyBackup(data)) alert("Файл не похож на бэкап ЦЕЛИ.");
+  };
+  rd.readAsText(file);
+  e.target.value="";
+});
 
 /* ================= theme ================= */
 function applyTheme(){
